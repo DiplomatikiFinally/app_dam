@@ -147,9 +147,22 @@ if uploaded_file is not None:
 
     with tab1:
         if standard_sheets:
-            selected_sheet = st.selectbox("Επίλεξε κατηγορία (sheet):", standard_sheets, key="select_standard")
-            raw_df = pd.read_excel(xls, sheet_name=selected_sheet)
-            render_standard_sheet(raw_df, selected_sheet)
+            default_selection = [standard_sheets[0]] if standard_sheets else []
+            selected_sheets = st.multiselect(
+                "Επίλεξε κατηγορίες (μπορείς πάνω από μία):",
+                standard_sheets,
+                default=default_selection,
+                key="select_standard",
+            )
+
+            if not selected_sheets:
+                st.info("Επίλεξε τουλάχιστον μία κατηγορία για να εμφανιστούν δεδομένα.")
+
+            for sheet in selected_sheets:
+                raw_df = pd.read_excel(xls, sheet_name=sheet)
+                render_standard_sheet(raw_df, sheet)
+                st.markdown("---")
+                st.markdown("---")
         else:
             st.info("Δεν βρέθηκαν sheets δεδομένων.")
 
