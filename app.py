@@ -79,24 +79,6 @@ def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
         key=f"dl_{sheet_name}",
     )
 
-    st.markdown("---")
-    st.subheader("🔍 Ωριαίο προφίλ συγκεκριμένης ημέρας")
-
-    available_dates = list(pivot.index)
-    if available_dates:
-        picked_date = st.selectbox(
-            "Επίλεξε ημερομηνία:", available_dates, key=f"pick_{sheet_name}"
-        )
-        day_values = pivot.loc[picked_date, hour_cols]
-        day_df = pd.DataFrame({"hour": hour_cols, "value": day_values.values}).set_index("hour")
-        st.line_chart(day_df, use_container_width=True)
-
-        c1, c2 = st.columns(2)
-        c1.metric("SUM", f"{pivot.loc[picked_date, 'SUM']:.0f}")
-        c2.metric("AVG", f"{pivot.loc[picked_date, 'AVG']:.0f}")
-    else:
-        st.info("Δεν υπάρχουν ημερομηνίες στο επιλεγμένο εύρος.")
-
 
 def render_country_sheet(raw_df: pd.DataFrame, sheet_name: str):
     if "delivery_ts" not in raw_df.columns:
