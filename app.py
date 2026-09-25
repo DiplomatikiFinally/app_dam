@@ -218,5 +218,5 @@ if uploaded_file is not None:
                     st.markdown("---")
             else:
                 st.info("Δεν βρέθηκαν sheets εξαγωγών ('Export GR-XX').")
-else:
+else: 
     st.info("Ανέβασε ένα .xlsx αρχείο για να ξεκινήσεις.")
