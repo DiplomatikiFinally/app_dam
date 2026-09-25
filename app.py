@@ -61,7 +61,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
     like any other real value (so it lands wherever it falls in that
     column's range) and is never painted black."""
     color_cols = hour_cols + ["SUM", "AVG"]
-    cmap = mcolormaps["GnYlRd_r"]  # low -> green, high -> red
+    cmap = mcolormaps["RdYlGn_r"]  # low -> green, high -> red
 
     def colorize(col: pd.Series):
         vals = col.to_numpy(dtype=float)
