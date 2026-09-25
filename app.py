@@ -53,43 +53,34 @@ def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value") -> pd.DataFra
 
 
 def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
-    """Zero-safe, outlier-robust background coloring:
-    - 0 always gets a pale color (never black/empty).
-    - Colors are scaled using the 98th percentile instead of the raw max,
-      so a single extreme outlier doesn't wash out all the other differences.
-    - If negative values are present (e.g. residual sheets), uses a diverging
-      red-yellow-green scale centered on 0; otherwise a pale->saturated
-      sequential scale starting at 0.
-    """
+    """Per-column (per-hour) background coloring, like a classic 3-color
+    Excel scale: green = lowest value in that column, red = highest value
+    in that column, yellow/orange in between. Each hour column (plus SUM
+    and AVG) is scaled independently, so differences within an hour are
+    always visible regardless of how big other columns are. 0 is scaled
+    like any other real value (so it lands wherever it falls in that
+    column's range) and is never painted black."""
     color_cols = hour_cols + ["SUM", "AVG"]
-    vals = pivot[color_cols].to_numpy(dtype=float)
-    finite_vals = vals[np.isfinite(vals)]
+    cmap = mcolormaps["RdYlGn_r"]  # low -> green, high -> red
 
-    if finite_vals.size == 0:
-        norm = mcolors.Normalize(vmin=0, vmax=1)
-        cmap = mcolormaps["RdYlGn_r"]
-    else:
-        data_min = float(np.nanmin(finite_vals))
-        data_max = float(np.nanmax(finite_vals))
-        robust_max = float(np.nanpercentile(finite_vals, 98))
-
-        if data_min < 0:
-            abs_cap = max(abs(data_min), abs(robust_max), 1e-9)
-            norm = mcolors.TwoSlopeNorm(vmin=-abs_cap, vcenter=0, vmax=abs_cap)
-            cmap = mcolormaps["RdYlGn"]
+    def colorize(col: pd.Series):
+        vals = col.to_numpy(dtype=float)
+        finite = vals[np.isfinite(vals)]
+        if finite.size == 0:
+            vmin, vmax = 0.0, 1.0
         else:
-            vmax = robust_max if robust_max > 0 else (data_max if data_max > 0 else 1.0)
-            norm = mcolors.Normalize(vmin=0, vmax=vmax)
-            cmap = mcolormaps["RdYlGn_r"]
+            vmin = float(np.nanmin(finite))
+            vmax = float(np.nanmax(finite))
+            if vmin == vmax:
+                vmax = vmin + 1.0  # avoid degenerate range for a constant column
 
-    def colorize(series: pd.Series):
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
         styles = []
-        for v in series:
+        for v in col:
             if pd.isna(v):
                 styles.append("background-color: #eeeeee; color: #999999;")
             else:
-                clipped = min(max(float(v), norm.vmin), norm.vmax)
-                rgba = cmap(norm(clipped))
+                rgba = cmap(norm(float(v)))
                 hex_color = mcolors.to_hex(rgba)
                 r, g, b = mcolors.to_rgb(hex_color)
                 luminance = 0.299 * r + 0.587 * g + 0.114 * b
