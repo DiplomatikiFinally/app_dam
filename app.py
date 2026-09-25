@@ -67,7 +67,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
 
     if finite_vals.size == 0:
         norm = mcolors.Normalize(vmin=0, vmax=1)
-        cmap = mcolormaps["YlOrRd"]
+        cmap = mcolormaps["RdYlGn_r"]
     else:
         data_min = float(np.nanmin(finite_vals))
         data_max = float(np.nanmax(finite_vals))
@@ -80,7 +80,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
         else:
             vmax = robust_max if robust_max > 0 else (data_max if data_max > 0 else 1.0)
             norm = mcolors.Normalize(vmin=0, vmax=vmax)
-            cmap = mcolormaps["YlOrRd"]
+            cmap = mcolormaps["RdYlGn_r"]
 
     def colorize(series: pd.Series):
         styles = []
