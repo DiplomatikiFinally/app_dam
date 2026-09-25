@@ -13,17 +13,19 @@ uploaded_file = st.file_uploader("Ανέβασε το Excel αρχείο (.xlsx)
 
 # Sheets like "Export GR-IT", "Import GR-BG", ... are per-country flow sheets,
 # each in the same long format (market / delivery_ts / value) as the standard sheets.
-COUNTRY_SHEET_RE = re.compile(r"^(export|import)\s+gr-(\w+)$", re.IGNORECASE)
+COUNTRY_SHEET_RE = re.compile(r"^(export|import)\s+(?:gr-(\w+)|(\w+)-gr)$", re.IGNORECASE)
 
 # All timestamps are shifted forward by this many hours before being displayed
 # (e.g. to move from UTC to local delivery time).
 TIMESTAMP_SHIFT_HOURS = 2
 
 
-def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value") -> pd.DataFrame:
-    """Pivot table: γραμμές = ημερομηνία, στήλες = ώρα (1-24), + SUM/AVG.
-    Timestamps are shifted by TIMESTAMP_SHIFT_HOURS before pivoting, and any
-    hour with no data is treated as 0 (not left blank/NaN)."""
+def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value", sheet_name: str = "") -> pd.DataFrame:
+    """Pivot table: γραμμές = ημερομηνία, στήλες = ώρα (1-24), + κενή στήλη,
+    SUM, AVG. Timestamps are shifted by TIMESTAMP_SHIFT_HOURS before
+    pivoting, and any hour with no data is treated as 0 (not left blank/NaN).
+    For sheets whose name contains "mcp" (price data), SUM is left blank
+    since summing a price across hours isn't meaningful."""
     df = df.copy()
     df["delivery_ts"] = pd.to_datetime(df["delivery_ts"], errors="coerce") + pd.Timedelta(
         hours=TIMESTAMP_SHIFT_HOURS
@@ -47,6 +49,13 @@ def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value") -> pd.DataFra
 
     pivot["SUM"] = pivot[range(1, 25)].sum(axis=1)
     pivot["AVG"] = pivot[range(1, 25)].mean(axis=1)
+
+    if "mcp" in (sheet_name or "").lower():
+        pivot["SUM"] = np.nan  # summing a price across hours isn't meaningful
+
+    # empty spacer column right before SUM, purely visual
+    pivot.insert(pivot.columns.get_loc("SUM"), "", np.nan)
+
     pivot = pivot.sort_index(ascending=False)
 
     return pivot
@@ -75,7 +84,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
         styles = []
         for v in values:
             if pd.isna(v):
-                styles.append("background-color: #eeeeee; color: #999999;")
+                styles.append("background-color: transparent;")
             else:
                 rgba = cmap(norm(float(v)))
                 hex_color = mcolors.to_hex(rgba)
@@ -96,7 +105,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
         .apply(colorize_row, subset=hour_cols, axis=1)
         .apply(colorize_col, subset=["SUM"], axis=0)
         .apply(colorize_col, subset=["AVG"], axis=0)
-        .format(precision=0, na_rep="0")
+        .format(precision=0, na_rep="")
     )
     return styled
 
@@ -119,7 +128,7 @@ def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
         st.error("Το sheet αυτό δεν έχει στήλες 'delivery_ts' και 'value'.")
         return
 
-    pivot_full = build_hourly_pivot(raw_df)
+    pivot_full = build_hourly_pivot(raw_df, sheet_name=sheet_name)
     min_date, max_date = pivot_full.index.min(), pivot_full.index.max()
     start_date, end_date = date_range_picker(min_date, max_date, key=f"dr_{sheet_name}")
 
@@ -150,7 +159,7 @@ if uploaded_file is not None:
         m = COUNTRY_SHEET_RE.match(s.strip())
         if m:
             direction = m.group(1).capitalize()
-            country = m.group(2).upper()
+            country = (m.group(2) or m.group(3)).upper()
             country_sheet_matches[s] = (direction, country)
 
     tab1, tab2 = st.tabs(["📁 Όλα τα Δεδομένα", "🌍 Imports / Exports ανά Χώρα"])
@@ -218,5 +227,5 @@ if uploaded_file is not None:
                     st.markdown("---")
             else:
                 st.info("Δεν βρέθηκαν sheets εξαγωγών ('Export GR-XX').")
-else: 
+else:
     st.info("Ανέβασε ένα .xlsx αρχείο για να ξεκινήσεις.")
