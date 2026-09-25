@@ -53,18 +53,15 @@ def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value") -> pd.DataFra
 
 
 def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
-    """Per-column (per-hour) background coloring, like a classic 3-color
-    Excel scale: green = lowest value in that column, red = highest value
-    in that column, yellow/orange in between. Each hour column (plus SUM
-    and AVG) is scaled independently, so differences within an hour are
-    always visible regardless of how big other columns are. 0 is scaled
-    like any other real value (so it lands wherever it falls in that
-    column's range) and is never painted black."""
-    color_cols = hour_cols + ["SUM", "AVG"]
+    """Per-row (per-day) background coloring for the hourly columns: for a
+    given day, the lowest hour is green and the highest hour is red,
+    independent of what happens on other days. SUM and AVG keep their own
+    per-column scale (so those totals are still comparable day to day). 0
+    is scaled like any other real value and is never painted black."""
     cmap = mcolormaps["RdYlGn_r"]  # low -> green, high -> red
 
-    def colorize(col: pd.Series):
-        vals = col.to_numpy(dtype=float)
+    def _styles_for(values):
+        vals = np.asarray(values, dtype=float)
         finite = vals[np.isfinite(vals)]
         if finite.size == 0:
             vmin, vmax = 0.0, 1.0
@@ -72,11 +69,11 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
             vmin = float(np.nanmin(finite))
             vmax = float(np.nanmax(finite))
             if vmin == vmax:
-                vmax = vmin + 1.0  # avoid degenerate range for a constant column
+                vmax = vmin + 1.0  # avoid a degenerate (constant) range
 
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
         styles = []
-        for v in col:
+        for v in values:
             if pd.isna(v):
                 styles.append("background-color: #eeeeee; color: #999999;")
             else:
@@ -88,7 +85,19 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
                 styles.append(f"background-color: {hex_color}; color: {text_color};")
         return styles
 
-    styled = pivot.style.apply(colorize, subset=color_cols).format(precision=0, na_rep="0")
+    def colorize_row(row: pd.Series):
+        return _styles_for(row.to_numpy())
+
+    def colorize_col(col: pd.Series):
+        return _styles_for(col.to_numpy())
+
+    styled = (
+        pivot.style
+        .apply(colorize_row, subset=hour_cols, axis=1)
+        .apply(colorize_col, subset=["SUM"], axis=0)
+        .apply(colorize_col, subset=["AVG"], axis=0)
+        .format(precision=0, na_rep="0")
+    )
     return styled
 
 
