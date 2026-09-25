@@ -3,7 +3,7 @@ import re
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.cm as cm
+from matplotlib import colormaps as mcolormaps
 import matplotlib.colors as mcolors
 
 st.set_page_config(page_title="DAM Results Heatmap", layout="wide")
@@ -59,7 +59,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list, cmap_name: str = "Rd
             vmax = vmin + 1.0
 
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-    cmap = cm.get_cmap(cmap_name)
+    cmap = mcolormaps[cmap_name]
 
     def colorize(series: pd.Series):
         styles = []
@@ -108,7 +108,7 @@ def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
 
     hour_cols = list(range(1, 25))
     styled = style_pivot_table(pivot, hour_cols)
-    st.dataframe(styled, use_container_width=True, height=550)
+    st.dataframe(styled, width='stretch', height=550)
 
     st.download_button(
         label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
@@ -156,8 +156,8 @@ def render_country_group(direction_label: str, sheets_dict: dict):
     )
 
     if selected_countries:
-        st.line_chart(df_filtered[selected_countries], use_container_width=True)
-        st.dataframe(df_filtered[selected_countries], use_container_width=True, height=400)
+        st.line_chart(df_filtered[selected_countries], width='stretch')
+        st.dataframe(df_filtered[selected_countries], width='stretch', height=400)
 
         st.download_button(
             label=f"⬇️ Κατέβασε ({direction_label}) ως CSV",
