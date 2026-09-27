@@ -162,7 +162,7 @@ if uploaded_file is not None:
             country = (m.group(2) or m.group(3)).upper()
             country_sheet_matches[s] = (direction, country)
 
-    tab1, tab2 = st.tabs(["📁 Όλα τα Δεδομένα", "🌍 Imports / Exports ανά Χώρα"])
+    tab1, tab2 = st.tabs(["📁 Dam Results", "🌍 Imports / Exports"])
 
     with tab1:
         if sheet_names:
