@@ -174,6 +174,8 @@ if uploaded_file is not None:
             country = (m.group(2) or m.group(3)).upper()
             country_sheet_matches[s] = (direction, country)
 
+    standard_sheets = [s for s in sheet_names if s not in country_sheet_matches]
+
     tab1, tab2 = st.tabs(["📁 Dam Results", "🌍 Imports / Exports"])
 
     with tab1:
@@ -181,7 +183,7 @@ if uploaded_file is not None:
             default_selection = [sheet_names[0]] if sheet_names else []
             selected_sheets = st.multiselect(
                 "Επίλεξε κατηγορίες (μπορείς πάνω από μία):",
-                sheet_names,
+                standard_sheets,
                 default=default_selection,
                 key="select_standard",
             )
