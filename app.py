@@ -186,46 +186,63 @@ if uploaded_file is not None:
             st.info("Δεν βρέθηκαν sheets δεδομένων.")
 
     with tab2:
-        import_sheets = sorted(
-            s for s, (d, _c) in country_sheet_matches.items() if d == "Import"
-        )
-        export_sheets = sorted(
-            s for s, (d, _c) in country_sheet_matches.items() if d == "Export"
-        )
+        # Διαχωρισμός των sheets με βάση τα ονόματά τους
+        net_sheets = sorted([s for s in sheet_names if "net" in s.lower() or "total" in s.lower()])
+        import_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Import"])
+        export_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Export"])
 
-        if not import_sheets and not export_sheets:
-            st.info(
-                "Δεν βρέθηκαν sheets τύπου 'Export GR-XX' / 'Import GR-XX' στο αρχείο."
-            )
+        if not net_sheets and not import_sheets and not export_sheets:
+            st.info("Δεν βρέθηκαν σχετικά sheets για Imports / Exports / Nets στο αρχείο.")
         else:
-            st.markdown("#### 📥 Εισαγωγές (Imports) ανά χώρα")
-            if import_sheets:
-                selected_imports = st.multiselect(
-                    "Επίλεξε χώρες εισαγωγών:",
-                    import_sheets,
-                    default=[],
-                    key="select_imports",
-                )
-                for sheet in selected_imports:
-                    raw_df = pd.read_excel(xls, sheet_name=sheet)
-                    render_standard_sheet(raw_df, sheet)
-                    st.markdown("---")
-            else:
-                st.info("Δεν βρέθηκαν sheets εισαγωγών ('Import GR-XX').")
+            # Δημιουργία υπο-tabs μέσα στο Tab 2 για καλύτερη οργάνωση
+            sub_tab1, sub_tab2, sub_tab3 = st.tabs(["📊 Net & Totals", "📥 Αναλυτικές Εισαγωγές", "📤 Αναλυτικές Εξαγωγές"])
 
-            st.markdown("#### 📤 Εξαγωγές (Exports) ανά χώρα")
-            if export_sheets:
-                selected_exports = st.multiselect(
-                    "Επίλεξε χώρες εξαγωγών:",
-                    export_sheets,
-                    default=[],
-                    key="select_exports",
-                )
-                for sheet in selected_exports:
-                    raw_df = pd.read_excel(xls, sheet_name=sheet)
-                    render_standard_sheet(raw_df, sheet)
-                    st.markdown("---")
-            else:
-                st.info("Δεν βρέθηκαν sheets εξαγωγών ('Export GR-XX').")
+            with sub_tab1:
+                st.markdown("#### 🔄 Καθαρές Ροές (Net) & Total Imports / Exports")
+                if net_sheets:
+                    selected_nets = st.multiselect(
+                        "Επίλεξε Net / Total sheets:",
+                        net_sheets,
+                        default=net_sheets, # Προεπιλογή να φαίνονται όλα τα net/totals
+                        key="select_nets",
+                    )
+                    for sheet in selected_nets:
+                        raw_df = pd.read_excel(xls, sheet_name=sheet)
+                        render_standard_sheet(raw_df, sheet)
+                        st.markdown("---")
+                else:
+                    st.info("Δεν βρέθηκαν sheets τύπου 'Net ...' ή 'Total ...'.")
+
+            with sub_tab2:
+                st.markdown("#### 📥 Αναλυτικές Εισαγωγές ανά χώρα (Import XX-GR)")
+                if import_sheets:
+                    selected_imports = st.multiselect(
+                        "Επίλεξε χώρες εισαγωγών:",
+                        import_sheets,
+                        default=[],
+                        key="select_imports",
+                    )
+                    for sheet in selected_imports:
+                        raw_df = pd.read_excel(xls, sheet_name=sheet)
+                        render_standard_sheet(raw_df, sheet)
+                        st.markdown("---")
+                else:
+                    st.info("Δεν βρέθηκαν αναλυτικά sheets εισαγωγών.")
+
+            with sub_tab3:
+                st.markdown("#### 📤 Αναλυτικές Εξαγωγές ανά χώρα (Export GR-XX)")
+                if export_sheets:
+                    selected_exports = st.multiselect(
+                        "Επίλεξε χώρες εξαγωγών:",
+                        export_sheets,
+                        default=[],
+                        key="select_exports",
+                    )
+                    for sheet in selected_exports:
+                        raw_df = pd.read_excel(xls, sheet_name=sheet)
+                        render_standard_sheet(raw_df, sheet)
+                        st.markdown("---")
+                else:
+                    st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
 else:
     st.info("Ανέβασε ένα .xlsx αρχείο για να ξεκινήσεις.")
