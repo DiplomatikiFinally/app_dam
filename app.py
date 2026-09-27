@@ -125,11 +125,23 @@ def date_range_picker(min_date, max_date, key):
 
 def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
     if not {"delivery_ts", "value"}.issubset(raw_df.columns):
-        st.error("Το sheet αυτό δεν έχει στήλες 'delivery_ts' και 'value'.")
+        st.error(f"Το sheet '{sheet_name}' δεν έχει τις απαραίτητες στήλες 'delivery_ts' και 'value'.")
         return
 
     pivot_full = build_hourly_pivot(raw_df, sheet_name=sheet_name)
+    
+    # Έλεγχος αν ο πίνακας είναι κενός μετά το pivot
+    if pivot_full.empty:
+        st.warning(f"Το sheet '{sheet_name}' δεν περιέχει δεδομένα για εμφάνιση.")
+        return
+
     min_date, max_date = pivot_full.index.min(), pivot_full.index.max()
+    
+    # Έλεγχος αν οι ημερομηνίες είναι έγκυρες (όχι NaT / None)
+    if pd.isna(min_date) or pd.isna(max_date):
+        st.warning(f"Δεν βρέθηκαν έγκυρες ημερομηνίες στο sheet '{sheet_name}'.")
+        return
+
     start_date, end_date = date_range_picker(min_date, max_date, key=f"dr_{sheet_name}")
 
     pivot = pivot_full[(pivot_full.index >= start_date) & (pivot_full.index <= end_date)]
@@ -138,7 +150,7 @@ def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
 
     hour_cols = list(range(1, 25))
     styled = style_pivot_table(pivot, hour_cols)
-    st.dataframe(styled, width="stretch", height=550)
+    st.dataframe(styled, use_container_width=True, height=550)
 
     st.download_button(
         label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
