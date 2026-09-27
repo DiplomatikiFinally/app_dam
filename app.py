@@ -173,6 +173,8 @@ if uploaded_file is not None:
             direction = m.group(1).capitalize()
             country = (m.group(2) or m.group(3)).upper()
             country_sheet_matches[s] = (direction, country)
+        elif s.strip().lower().startswith("net "):
+            country_sheet_matches[s] = ("Net", s.strip()[4:])
 
     standard_sheets = [s for s in sheet_names if s not in country_sheet_matches]
 
