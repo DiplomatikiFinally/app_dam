@@ -13,7 +13,7 @@ uploaded_file = st.file_uploader("Ανέβασε το Excel αρχείο (.xlsx)
 
 # Sheets like "Export GR-IT", "Import GR-BG", ... are per-country flow sheets,
 # each in the same long format (market / delivery_ts / value) as the standard sheets.
-COUNTRY_SHEET_RE = re.compile(r"^(export|import|net)\b", re.IGNORECASE)
+COUNTRY_SHEET_RE = re.compile(r"^(export|import)\s+(?:gr-(\w+)|(\w+)-gr)$", re.IGNORECASE)
 
 # All timestamps are shifted forward by this many hours before being displayed
 # (e.g. to move from UTC to local delivery time).
