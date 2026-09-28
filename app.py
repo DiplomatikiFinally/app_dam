@@ -57,7 +57,6 @@ def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value", sheet_name: s
     pivot.insert(pivot.columns.get_loc("SUM"), "", np.nan)
 
     pivot = pivot.sort_index(ascending=False)
-    #pivot = pivot.dropna(subset=list(range(1, 25)), how='all')
     return pivot
 
 
@@ -261,7 +260,7 @@ if uploaded_file is not None:
 
             for sheet in selected_sheets:
                 raw_df = pd.read_excel(xls, sheet_name=sheet)
-                render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="tab1")
+                render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="tab1")
                 st.markdown("---")
                 st.markdown("---")
         else:
@@ -269,10 +268,10 @@ if uploaded_file is not None:
 
     with tab2:
         net_sheets = sorted([
-                                s for s in sheet_names
-                                if ("net" in s.lower() or "total" in s.lower())
-                                and "residual" not in s.lower()
-                            ])
+                                    s for s in sheet_names
+                                    if ("net" in s.lower() or "total" in s.lower())
+                                    and "residual" not in s.lower()
+                                ])
         import_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Import"])
         export_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Export"])
 
@@ -292,7 +291,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_nets:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="net")
+                        render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="net")
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν sheets τύπου 'Net ...' ή 'Total ...'.")
@@ -308,7 +307,8 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_imports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_datekey_prefix="imp")
+                        # ΔΙΟΡΘΩΣΗ ΕΔΩ: Χρήση key_prefix αντί για end_datekey_prefix
+                        render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="imp")
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εισαγωγών.")
@@ -324,7 +324,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_exports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="exp")
+                        render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="exp")
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
