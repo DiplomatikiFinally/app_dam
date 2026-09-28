@@ -1,5 +1,5 @@
 import re
-
+import io
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -57,16 +57,11 @@ def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value", sheet_name: s
     pivot.insert(pivot.columns.get_loc("SUM"), "", np.nan)
 
     pivot = pivot.sort_index(ascending=False)
-    #pivot = pivot.dropna(subset=list(range(1, 25)), how='all')
     return pivot
 
 
 def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
-    """Per-row (per-day) background coloring for the hourly columns: for a
-    given day, the lowest hour is green and the highest hour is red,
-    independent of what happens on other days. SUM and AVG keep their own
-    per-column scale (so those totals are still comparable day to day). 0
-    is scaled like any other real value and is never painted black."""
+    """Per-row (per-day) background coloring for the hourly columns."""
     cmap = mcolormaps["RdYlGn_r"]  # low -> green, high -> red
 
     def _styles_for(values):
@@ -78,7 +73,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
             vmin = float(np.nanmin(finite))
             vmax = float(np.nanmax(finite))
             if vmin == vmax:
-                vmax = vmin + 1.0  # avoid a degenerate (constant) range
+                vmax = vmin + 1.0
 
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
         styles = []
@@ -123,12 +118,26 @@ def date_range_picker(min_date, max_date, key):
     return min_date, max_date
 
 
+def get_filtered_pivot(raw_df: pd.DataFrame, sheet_name: str, start_date, end_date) -> pd.DataFrame:
+    if not {"delivery_ts", "value"}.issubset(raw_df.columns):
+        return pd.DataFrame()
+
+    pivot_full = build_hourly_pivot(raw_df, sheet_name=sheet_name)
+    if pivot_full.empty:
+        return pd.DataFrame()
+
+    pivot = pivot_full[
+        (pivot_full.index >= start_date) &
+        (pivot_full.index <= end_date)
+    ]
+    return pivot
+
+
 def render_standard_sheet(
     raw_df: pd.DataFrame,
     sheet_name: str,
     start_date,
-    end_date, 
-    key_prefix: str = "std"
+    end_date
 ):
     if not {"delivery_ts", "value"}.issubset(raw_df.columns):
         st.error(
@@ -137,22 +146,7 @@ def render_standard_sheet(
         )
         return
 
-    pivot_full = build_hourly_pivot(
-        raw_df,
-        sheet_name=sheet_name
-    )
-
-    if pivot_full.empty:
-        st.warning(
-            f"Το sheet '{sheet_name}' δεν περιέχει δεδομένα για εμφάνιση."
-        )
-        return
-
-    # Χρησιμοποιούμε το ΙΔΙΟ date range για όλα τα sheets
-    pivot = pivot_full[
-        (pivot_full.index >= start_date) &
-        (pivot_full.index <= end_date)
-    ]
+    pivot = get_filtered_pivot(raw_df, sheet_name, start_date, end_date)
 
     st.subheader(sheet_name)
 
@@ -161,24 +155,12 @@ def render_standard_sheet(
         return
 
     hour_cols = list(range(1, 25))
-
-    styled = style_pivot_table(
-        pivot,
-        hour_cols
-    )
+    styled = style_pivot_table(pivot, hour_cols)
 
     st.dataframe(
         styled,
         use_container_width=True,
         height=550
-    )
-
-    st.download_button(
-        label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
-        data=pivot.to_csv().encode("utf-8-sig"),
-        file_name=f"{sheet_name}_pivot.csv",
-        mime="text/csv",
-        key=f"dl_{key_prefix}_{sheet_name}",
     )
 
 
@@ -210,7 +192,6 @@ if uploaded_file is not None:
                 all_dates.extend(
                     temp_dates.dt.date.tolist()
                 )
-
         except Exception:
             pass
 
@@ -231,8 +212,8 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
-    # Detect per-country Export/Import sheets, e.g. "Export GR-IT", "Import GR-BG"
-    country_sheet_matches = {}  # sheet_name -> (direction, country_code)
+    # Detect per-country Export/Import sheets
+    country_sheet_matches = {}
     for s in sheet_names:
         m = COUNTRY_SHEET_RE.match(s.strip())
         if m:
@@ -246,6 +227,7 @@ if uploaded_file is not None:
 
     tab1, tab2 = st.tabs(["📁 Dam Results", "🌍 Imports / Exports"])
 
+    # Συλλογή δεδομένων για μαζικό κατέβασμα ανά tab ή συνολικά
     with tab1:
         if sheet_names:
             default_selection = standard_sheets
@@ -259,11 +241,34 @@ if uploaded_file is not None:
             if not selected_sheets:
                 st.info("Επίλεξε τουλάχιστον μία κατηγορία για να εμφανιστούν δεδομένα.")
 
+            tab1_data = {}
             for sheet in selected_sheets:
                 raw_df = pd.read_excel(xls, sheet_name=sheet)
-                render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="tab1")
+                render_standard_sheet(raw_df, sheet, start_date, end_date)
+                
+                # Αποθήκευση για το συνολικό export
+                piv = get_filtered_pivot(raw_df, sheet, start_date, end_date)
+                if not piv.empty:
+                    tab1_data[sheet] = piv
+
                 st.markdown("---")
                 st.markdown("---")
+
+            if tab1_data:
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                    for sh_name, df_val in tab1_data.items():
+                        safe_name = re.sub(r'[:\\/?*\[\]]', '_', sh_name)[:31]
+                        df_val.to_excel(writer, sheet_name=safe_name)
+                buffer.seek(0)
+
+                st.download_button(
+                    label="⬇️ Κατέβασε ΟΛΑ τα επιλεγμένα DAM Results μαζί (Excel)",
+                    data=buffer,
+                    file_name="DAM_Results_All.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_all_tab1"
+                )
         else:
             st.info("Δεν βρέθηκαν sheets δεδομένων.")
 
@@ -277,6 +282,8 @@ if uploaded_file is not None:
         else:
             sub_tab1, sub_tab2, sub_tab3 = st.tabs(["📊 Net & Totals", "📥 Αναλυτικές Εισαγωγές", "📤 Αναλυτικές Εξαγωγές"])
 
+            tab2_data = {}
+
             with sub_tab1:
                 st.markdown("#### 🔄 Καθαρές Ροές (Net) & Total Imports / Exports")
                 if net_sheets:
@@ -288,7 +295,10 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_nets:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="net")
+                        render_standard_sheet(raw_df, sheet, start_date, end_date)
+                        piv = get_filtered_pivot(raw_df, sheet, start_date, end_date)
+                        if not piv.empty:
+                            tab2_data[sheet] = piv
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν sheets τύπου 'Net ...' ή 'Total ...'.")
@@ -304,7 +314,10 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_imports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_datekey_prefix="imp")
+                        render_standard_sheet(raw_df, sheet, start_date, end_date)
+                        piv = get_filtered_pivot(raw_df, sheet, start_date, end_date)
+                        if not piv.empty:
+                            tab2_data[sheet] = piv
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εισαγωγών.")
@@ -320,9 +333,29 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_exports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="exp")
+                        render_standard_sheet(raw_df, sheet, start_date, end_date)
+                        piv = get_filtered_pivot(raw_df, sheet, start_date, end_date)
+                        if not piv.empty:
+                            tab2_data[sheet] = piv
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
+
+            if tab2_data:
+                st.markdown("---")
+                buffer2 = io.BytesIO()
+                with pd.ExcelWriter(buffer2, engine="openpyxl") as writer:
+                    for sh_name, df_val in tab2_data.items():
+                        safe_name = re.sub(r'[:\\/?*\[\]]', '_', sh_name)[:31]
+                        df_val.to_excel(writer, sheet_name=safe_name)
+                buffer2.seek(0)
+
+                st.download_button(
+                    label="⬇️ Κατέβασε ΟΛΑ τα επιλεγμένα Imports / Exports / Nets μαζί (Excel)",
+                    data=buffer2,
+                    file_name="Imports_Exports_Nets_All.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_all_tab2"
+                )
 else:
     st.info("Ανέβασε ένα .xlsx αρχείο για να ξεκινήσεις.")
