@@ -109,7 +109,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
     return styled
 
 
-def date_range_picker(min_date, max_date, key):
+def date_range_picker(min_date, max_date, default_range,key):
     date_range = st.date_input(
         "Επίλεξε εύρος ημερομηνιών:",
         value=(min_date, max_date),
@@ -216,17 +216,26 @@ if uploaded_file is not None:
     if not all_dates:
         st.error("Δεν βρέθηκαν έγκυρες ημερομηνίες στο αρχείο.")
         st.stop()
+# Βρίσκουμε τις μοναδικές ημερομηνίες ταξινομημένες
+    unique_dates = sorted(list(set(all_dates)))
+    global_min_date = unique_dates[0]
+    global_max_date = unique_dates[-1]
 
-    global_min_date = min(all_dates)
-    global_max_date = max(all_dates)
+    # --- ΠΡΟΣΘΕΣΕ ΑΥΤΕΣ Τis ΓΡΑΜΜΕΣ ---
+    default_start_date = unique_dates[-10] if len(unique_dates) >= 10 else global_min_date
+    default_end_date = global_max_date
+    default_range = (default_start_date, default_end_date)
+    # -----------------------------------
 
     st.markdown("### 📅 Περίοδος εμφάνισης")
 
     start_date, end_date = date_range_picker(
         global_min_date,
         global_max_date,
+        default_range, # <--- Πρόσθεσε το default_range εδώ στην κλήση
         key="global_date_range"
     )
+
 
     st.markdown("---")
 
