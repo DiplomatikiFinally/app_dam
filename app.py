@@ -280,7 +280,7 @@ if uploaded_file is not None:
 
             for sheet in selected_sheets:
                 raw_df = pd.read_excel(xls, sheet_name=sheet)
-                render_standard_sheet(raw_df, sheet)
+                render_standard_sheet(raw_df, sheet,start_date,end_date)
                 st.markdown("---")
                 st.markdown("---")
         else:
@@ -309,7 +309,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_nets:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet)
+                        render_standard_sheet(raw_df, sheet,start_date,end_date)
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν sheets τύπου 'Net ...' ή 'Total ...'.")
@@ -325,7 +325,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_imports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet)
+                        render_standard_sheet(raw_df, sheet,start_date,end_date)
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εισαγωγών.")
@@ -341,7 +341,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_exports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet)
+                        render_standard_sheet(raw_df, sheet,start_date,end_date)
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
