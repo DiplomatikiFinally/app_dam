@@ -20,12 +20,13 @@ COUNTRY_SHEET_RE = re.compile(r"^(export|import)\s+(?:gr-(\w+)|(\w+)-gr)$", re.I
 TIMESTAMP_SHIFT_HOURS = 2
 
 
-def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value", sheet_name: str = "") -> pd.DataFrame:
-    """Pivot table: γραμμές = ημερομηνία, στήλες = ώρα (1-24), + κενή στήλη,
-    SUM, AVG. Timestamps are shifted by TIMESTAMP_SHIFT_HOURS before
-    pivoting, and any hour with no data is treated as 0 (not left blank/NaN).
-    For sheets whose name contains "mcp" (price data), SUM is left blank
-    since summing a price across hours isn't meaningful."""
+def build_hourly_pivot(
+    df: pd.DataFrame,
+    value_col: str = "value",
+    sheet_name: str = "",
+    start_date=None,
+    end_date=None,
+) -> pd.DataFrame:
     df = df.copy()
     df["delivery_ts"] = pd.to_datetime(df["delivery_ts"], errors="coerce") + pd.Timedelta(
         hours=TIMESTAMP_SHIFT_HOURS
@@ -35,30 +36,38 @@ def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value", sheet_name: s
     df["date"] = df["delivery_ts"].dt.date
     df["hour"] = df["delivery_ts"].dt.hour + 1  # 1..24
 
-    pivot = df.pivot_table(
-        index="date", columns="hour", values=value_col, aggfunc="mean"
-    )
+    if df.empty:
+        pivot = pd.DataFrame(columns=list(range(1, 25)), dtype=float)
+        pivot.index.name = "date"
+    else:
+        pivot = df.pivot_table(
+            index="date", columns="hour", values=value_col, aggfunc="mean"
+        )
 
     for h in range(1, 25):
         if h not in pivot.columns:
             pivot[h] = np.nan
-    pivot = pivot[[h for h in range(1, 25)]]
+    pivot = pivot[list(range(1, 25))]
 
-    # Any missing quarter/hour is treated as 0, not left blank.
-    pivot[list(range(1, 25))] = pivot[list(range(1, 25))].fillna(0)
+    # Όλες οι μέρες του εύρους, ακόμα κι αν δεν έχουν καμία γραμμή στα δεδομένα
+    if start_date is not None and end_date is not None:
+        all_days = [d.date() for d in pd.date_range(start_date, end_date)]
+        pivot = pivot.reindex(all_days)
+        pivot.index.name = "date"
 
-    pivot["SUM"] = pivot[range(1, 25)].sum(axis=1)
-    pivot["AVG"] = pivot[range(1, 25)].mean(axis=1)
+    # Ό,τι λείπει (ώρα ή ολόκληρη μέρα) = 0
+    pivot = pivot.fillna(0)
+
+    pivot["SUM"] = pivot[list(range(1, 25))].sum(axis=1)
+    pivot["AVG"] = pivot[list(range(1, 25))].mean(axis=1)
 
     if "mcp" in (sheet_name or "").lower():
-        pivot["SUM"] = np.nan  # summing a price across hours isn't meaningful
+        pivot["SUM"] = np.nan
 
-    # empty spacer column right before SUM, purely visual
     pivot.insert(pivot.columns.get_loc("SUM"), "", np.nan)
 
     pivot = pivot.sort_index(ascending=False)
     return pivot
-
 
 def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
     """Per-row (per-day) background coloring for the hourly columns: for a
@@ -138,14 +147,13 @@ def render_standard_sheet(
 
     pivot_full = build_hourly_pivot(
         raw_df,
-        sheet_name=sheet_name
+        sheet_name=sheet_name,
+        start_date=start_date,
+        end_date=end_date,
     )
 
-    if pivot_full.empty:
-        st.warning(
-            f"Το sheet '{sheet_name}' δεν περιέχει δεδομένα για εμφάνιση."
-        )
-        return
+    pivot = pivot_full  # ήδη περιορισμένο στο εύρος από το reindex
+
 
     # Χρησιμοποιούμε το ΙΔΙΟ date range για όλα τα sheets
     pivot = pivot_full[
@@ -166,12 +174,13 @@ def render_standard_sheet(
         hour_cols
     )
 
+    table_height = min(35 * (len(pivot) + 1) + 3, 900)
+
     st.dataframe(
         styled,
         use_container_width=True,
-        height=550
+        height=table_height,
     )
-
     st.download_button(
         label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
         data=pivot.to_csv().encode("utf-8-sig"),
