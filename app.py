@@ -57,7 +57,7 @@ def build_hourly_pivot(df: pd.DataFrame, value_col: str = "value", sheet_name: s
     pivot.insert(pivot.columns.get_loc("SUM"), "", np.nan)
 
     pivot = pivot.sort_index(ascending=False)
-
+    pivot = pivot.dropna(subset=list(range(1, 25)), how='all')
     return pivot
 
 
