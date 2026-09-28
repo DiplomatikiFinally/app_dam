@@ -302,7 +302,7 @@ if uploaded_file is not None:
                     selected_imports = st.multiselect(
                         "Επίλεξε χώρες εισαγωγών:",
                         import_sheets,
-                        default=[],
+                        default=import_sheets,
                         key="select_imports",
                     )
                     for sheet in selected_imports:
@@ -319,7 +319,7 @@ if uploaded_file is not None:
                     selected_exports = st.multiselect(
                         "Επίλεξε χώρες εξαγωγών:",
                         export_sheets,
-                        default=[],
+                        default=export_sheets,
                         key="select_exports",
                     )
                     for sheet in selected_exports:
