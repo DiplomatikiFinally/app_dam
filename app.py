@@ -182,7 +182,7 @@ if uploaded_file is not None:
 
     with tab1:
         if sheet_names:
-            default_selection = [sheet_names[0]] if sheet_names else []
+            default_selection = standard_sheets
             selected_sheets = st.multiselect(
                 "Επίλεξε κατηγορίες (μπορείς πάνω από μία):",
                 standard_sheets,
