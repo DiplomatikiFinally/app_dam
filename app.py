@@ -123,27 +123,62 @@ def date_range_picker(min_date, max_date, key):
     return min_date, max_date
 
 
-def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
+def render_standard_sheet(
+    raw_df: pd.DataFrame,
+    sheet_name: str,
+    start_date,
+    end_date
+):
     if not {"delivery_ts", "value"}.issubset(raw_df.columns):
-        st.error(f"Το sheet '{sheet_name}' δεν έχει τις απαραίτητες στήλες 'delivery_ts' και 'value'.")
+        st.error(
+            f"Το sheet '{sheet_name}' δεν έχει τις απαραίτητες "
+            f"στήλες 'delivery_ts' και 'value'."
+        )
         return
 
-    pivot_full = build_hourly_pivot(raw_df, sheet_name=sheet_name)
-    
-    # Έλεγχος αν ο πίνακας είναι κενός μετά το pivot
+    pivot_full = build_hourly_pivot(
+        raw_df,
+        sheet_name=sheet_name
+    )
+
     if pivot_full.empty:
-        st.warning(f"Το sheet '{sheet_name}' δεν περιέχει δεδομένα για εμφάνιση.")
+        st.warning(
+            f"Το sheet '{sheet_name}' δεν περιέχει δεδομένα για εμφάνιση."
+        )
         return
 
-    min_date, max_date = pivot_full.index.min(), pivot_full.index.max()
-    
-    # Έλεγχος αν οι ημερομηνίες είναι έγκυρες (όχι NaT / None)
-    if pd.isna(min_date) or pd.isna(max_date):
-        st.warning(f"Δεν βρέθηκαν έγκυρες ημερομηνίες στο sheet '{sheet_name}'.")
+    # Χρησιμοποιούμε το ΙΔΙΟ date range για όλα τα sheets
+    pivot = pivot_full[
+        (pivot_full.index >= start_date) &
+        (pivot_full.index <= end_date)
+    ]
+
+    st.subheader(sheet_name)
+
+    if pivot.empty:
+        st.info("Δεν υπάρχουν δεδομένα για το επιλεγμένο διάστημα.")
         return
 
-    start_date, end_date = date_range_picker(min_date, max_date, key=f"dr_{sheet_name}")
+    hour_cols = list(range(1, 25))
 
+    styled = style_pivot_table(
+        pivot,
+        hour_cols
+    )
+
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        height=550
+    )
+
+    st.download_button(
+        label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
+        data=pivot.to_csv().encode("utf-8-sig"),
+        file_name=f"{sheet_name}_pivot.csv",
+        mime="text/csv",
+        key=f"dl_{sheet_name}",
+    )
     pivot = pivot_full[(pivot_full.index >= start_date) & (pivot_full.index <= end_date)]
 
     st.subheader(f"{sheet_name}")
@@ -164,6 +199,56 @@ def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
 if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
     sheet_names = xls.sheet_names
+        # --------------------------------------------------
+    # ΚΟΙΝΟ DATE RANGE ΓΙΑ ΟΛΟ ΤΟ DASHBOARD
+    # --------------------------------------------------
+
+    all_dates = []
+
+    for sheet in sheet_names:
+        try:
+            temp_df = pd.read_excel(
+                xls,
+                sheet_name=sheet,
+                usecols=["delivery_ts"]
+            )
+
+            temp_dates = (
+                pd.to_datetime(
+                    temp_df["delivery_ts"],
+                    errors="coerce"
+                )
+                + pd.Timedelta(hours=TIMESTAMP_SHIFT_HOURS)
+            )
+
+            temp_dates = temp_dates.dropna()
+
+            if not temp_dates.empty:
+                all_dates.extend(
+                    temp_dates.dt.date.tolist()
+                )
+
+        except Exception:
+            pass
+
+    if not all_dates:
+        st.error("Δεν βρέθηκαν έγκυρες ημερομηνίες στο αρχείο.")
+        st.stop()
+
+    global_min_date = min(all_dates)
+    global_max_date = max(all_dates)
+
+    st.markdown("### 📅 Περίοδος εμφάνισης")
+
+    start_date, end_date = date_range_picker(
+        global_min_date,
+        global_max_date,
+        key="global_date_range"
+    )
+
+    st.markdown("---")
+
+
 
     # Detect per-country Export/Import sheets, e.g. "Export GR-IT", "Import GR-BG"
     country_sheet_matches = {}  # sheet_name -> (direction, country_code)
