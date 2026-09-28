@@ -212,30 +212,37 @@ if uploaded_file is not None:
 
         except Exception:
             pass
-
     if not all_dates:
         st.error("Δεν βρέθηκαν έγκυρες ημερομηνίες στο αρχείο.")
         st.stop()
-# Βρίσκουμε τις μοναδικές ημερομηνίες ταξινομημένες
+
+    # Βρίσκουμε τις μοναδικές ημερομηνίες ταξινομημένες
     unique_dates = sorted(list(set(all_dates)))
     global_min_date = unique_dates[0]
     global_max_date = unique_dates[-1]
 
-    # --- ΠΡΟΣΘΕΣΕ ΑΥΤΕΣ Τis ΓΡΑΜΜΕΣ ---
+    # Υπολογισμός προεπιλογής: οι 10 πιο πρόσφατες ημέρες
     default_start_date = unique_dates[-10] if len(unique_dates) >= 10 else global_min_date
     default_end_date = global_max_date
-    default_range = (default_start_date, default_end_date)
-    # -----------------------------------
 
     st.markdown("### 📅 Περίοδος εμφάνισης")
 
-    start_date, end_date = date_range_picker(
-        global_min_date,
-        global_max_date,
-        default_range, # <--- Πρόσθεσε το default_range εδώ στην κλήση
-        key="global_date_range"
+    # Αν δεν υπάρχει ήδη αποθηκευμένη τιμή στο session, αρχικοποιούμε με τις 10 τελευταίες ημέρες
+    if "global_date_range" not in st.session_state:
+        st.session_state["global_date_range"] = (default_start_date, default_end_date)
+
+    date_range = st.date_input(
+        "Επίλεξε εύρος ημερομηνιών:",
+        value=st.session_state["global_date_range"],
+        min_value=global_min_date,
+        max_value=global_max_date,
+        key="global_date_range",
     )
 
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        start_date, end_date = date_range
+    else:
+        start_date, end_date = global_min_date, global_max_date
 
     st.markdown("---")
 
