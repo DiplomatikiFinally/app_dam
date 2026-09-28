@@ -168,15 +168,19 @@ def render_implicit_chart(raw_df, sheet_name, start_date, end_date, key_prefix="
     )
     chart_df["date"] = pd.to_datetime(chart_df["date"])
     chart_df["sign"] = np.where(chart_df["value"] >= 0, "Θετικό", "Αρνητικό")
+    chart_df["label"] = chart_df["date"].dt.strftime("%d/%m")
+    day_order = chart_df["label"].tolist()  # ήδη ταξινομημένο χρονολογικά
 
     chart = (
         alt.Chart(chart_df)
         .mark_bar()
         .encode(
             x=alt.X(
-                "date:T",
+                "label:O",
                 title="Ημερομηνία",
-                axis=alt.Axis(format="%d/%m", labelAngle=-45),
+                sort=day_order,
+                axis=alt.Axis(labelAngle=-45),
+                scale=alt.Scale(paddingInner=0.15, paddingOuter=0.05),
             ),
             y=alt.Y("value:Q", title=metric),
             color=alt.Color(
@@ -207,7 +211,6 @@ def render_implicit_chart(raw_df, sheet_name, start_date, end_date, key_prefix="
         mime="text/csv",
         key=f"dl_{key_prefix}_{sheet_name}",
     )
-
 def render_standard_sheet(
     raw_df: pd.DataFrame,
     sheet_name: str,
