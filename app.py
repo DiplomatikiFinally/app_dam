@@ -146,7 +146,7 @@ def render_standard_sheet(raw_df: pd.DataFrame, sheet_name: str):
 
     pivot = pivot_full[(pivot_full.index >= start_date) & (pivot_full.index <= end_date)]
 
-    st.subheader(f"{sheet_name} — Πίνακας ανά ημέρα / ώρα")
+    st.subheader(f"{sheet_name}")
 
     hour_cols = list(range(1, 25))
     styled = style_pivot_table(pivot, hour_cols)
