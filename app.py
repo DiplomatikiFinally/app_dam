@@ -179,29 +179,11 @@ def render_standard_sheet(
         mime="text/csv",
         key=f"dl_{sheet_name}",
     )
-    pivot = pivot_full[(pivot_full.index >= start_date) & (pivot_full.index <= end_date)]
-
-    st.subheader(f"{sheet_name}")
-
-    hour_cols = list(range(1, 25))
-    styled = style_pivot_table(pivot, hour_cols)
-    st.dataframe(styled, use_container_width=True, height=550)
-
-    st.download_button(
-        label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
-        data=pivot.to_csv().encode("utf-8-sig"),
-        file_name=f"{sheet_name}_pivot.csv",
-        mime="text/csv",
-        key=f"dl_{sheet_name}",
-    )
 
 
 if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
     sheet_names = xls.sheet_names
-        # --------------------------------------------------
-    # ΚΟΙΝΟ DATE RANGE ΓΙΑ ΟΛΟ ΤΟ DASHBOARD
-    # --------------------------------------------------
 
     all_dates = []
 
@@ -248,8 +230,6 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
-
-
     # Detect per-country Export/Import sheets, e.g. "Export GR-IT", "Import GR-BG"
     country_sheet_matches = {}  # sheet_name -> (direction, country_code)
     for s in sheet_names:
@@ -280,14 +260,13 @@ if uploaded_file is not None:
 
             for sheet in selected_sheets:
                 raw_df = pd.read_excel(xls, sheet_name=sheet)
-                render_standard_sheet(raw_df, sheet,start_date,end_date)
+                render_standard_sheet(raw_df, sheet, start_date, end_date)
                 st.markdown("---")
                 st.markdown("---")
         else:
             st.info("Δεν βρέθηκαν sheets δεδομένων.")
 
     with tab2:
-        # Διαχωρισμός των sheets με βάση τα ονόματά τους
         net_sheets = sorted([s for s in sheet_names if "net" in s.lower() or "total" in s.lower()])
         import_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Import"])
         export_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Export"])
@@ -295,7 +274,6 @@ if uploaded_file is not None:
         if not net_sheets and not import_sheets and not export_sheets:
             st.info("Δεν βρέθηκαν σχετικά sheets για Imports / Exports / Nets στο αρχείο.")
         else:
-            # Δημιουργία υπο-tabs μέσα στο Tab 2 για καλύτερη οργάνωση
             sub_tab1, sub_tab2, sub_tab3 = st.tabs(["📊 Net & Totals", "📥 Αναλυτικές Εισαγωγές", "📤 Αναλυτικές Εξαγωγές"])
 
             with sub_tab1:
@@ -304,12 +282,12 @@ if uploaded_file is not None:
                     selected_nets = st.multiselect(
                         "Επίλεξε Net / Total sheets:",
                         net_sheets,
-                        default=net_sheets, # Προεπιλογή να φαίνονται όλα τα net/totals
+                        default=net_sheets,
                         key="select_nets",
                     )
                     for sheet in selected_nets:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet,start_date,end_date)
+                        render_standard_sheet(raw_df, sheet, start_date, end_date)
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν sheets τύπου 'Net ...' ή 'Total ...'.")
@@ -325,7 +303,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_imports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet,start_date,end_date)
+                        render_standard_sheet(raw_df, sheet, start_date, end_date)
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εισαγωγών.")
@@ -341,7 +319,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_exports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet,start_date,end_date)
+                        render_standard_sheet(raw_df, sheet, start_date, end_date)
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
