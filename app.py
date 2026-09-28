@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import colormaps as mcolormaps
 import matplotlib.colors as mcolors
+import altair as alt
 
 st.set_page_config(page_title="DAM Results Heatmap", layout="wide")
 st.title("📊 DAM Results — Ωριαία Ανάλυση")
@@ -129,7 +130,83 @@ def date_range_picker(min_date, max_date, default_range,key):
     if isinstance(date_range, tuple) and len(date_range) == 2:
         return date_range
     return min_date, max_date
+def render_implicit_chart(raw_df, sheet_name, start_date, end_date, key_prefix="std"):
+    if not {"delivery_ts", "value"}.issubset(raw_df.columns):
+        st.error(
+            f"Το sheet '{sheet_name}' δεν έχει τις απαραίτητες "
+            f"στήλες 'delivery_ts' και 'value'."
+        )
+        return
 
+    # Ίδια λογική με τα υπόλοιπα sheets (shift ώρας, μηδενισμός κενών ημερών)
+    pivot = build_hourly_pivot(
+        raw_df,
+        sheet_name=sheet_name,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    pivot = pivot[(pivot.index >= start_date) & (pivot.index <= end_date)]
+
+    st.subheader(sheet_name)
+
+    if pivot.empty:
+        st.info("Δεν υπάρχουν δεδομένα για το επιλεγμένο διάστημα.")
+        return
+
+    metric = st.radio(
+        "Τιμή ανά ημέρα:",
+        ["SUM", "AVG"],
+        horizontal=True,
+        key=f"metric_{key_prefix}_{sheet_name}",
+    )
+
+    chart_df = (
+        pivot[[metric]]
+        .rename(columns={metric: "value"})
+        .sort_index()
+        .reset_index()
+    )
+    chart_df["date"] = pd.to_datetime(chart_df["date"])
+    chart_df["sign"] = np.where(chart_df["value"] >= 0, "Θετικό", "Αρνητικό")
+
+    chart = (
+        alt.Chart(chart_df)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                "date:T",
+                title="Ημερομηνία",
+                axis=alt.Axis(format="%d/%m", labelAngle=-45),
+            ),
+            y=alt.Y("value:Q", title=metric),
+            color=alt.Color(
+                "sign:N",
+                scale=alt.Scale(
+                    domain=["Θετικό", "Αρνητικό"],
+                    range=["#2e7d32", "#c62828"],
+                ),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("date:T", title="Ημερομηνία", format="%d/%m/%Y"),
+                alt.Tooltip("value:Q", title=metric, format=",.0f"),
+            ],
+        )
+        .properties(height=400)
+    )
+
+    # Γραμμή του μηδενός για να φαίνεται ο οριζόντιος άξονας
+    zero_line = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="gray").encode(y="y:Q")
+
+    st.altair_chart(chart + zero_line, use_container_width=True)
+
+    st.download_button(
+        label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
+        data=pivot.to_csv().encode("utf-8-sig"),
+        file_name=f"{sheet_name}_pivot.csv",
+        mime="text/csv",
+        key=f"dl_{key_prefix}_{sheet_name}",
+    )
 
 def render_standard_sheet(
     raw_df: pd.DataFrame,
@@ -138,6 +215,13 @@ def render_standard_sheet(
     end_date, 
     key_prefix: str = "std"
 ):
+
+
+    if "implicit" in sheet_name.lower():
+        render_implicit_chart(raw_df, sheet_name, start_date, end_date, key_prefix)
+        return
+
+    
     if not {"delivery_ts", "value"}.issubset(raw_df.columns):
         st.error(
             f"Το sheet '{sheet_name}' δεν έχει τις απαραίτητες "
