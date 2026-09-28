@@ -127,7 +127,8 @@ def render_standard_sheet(
     raw_df: pd.DataFrame,
     sheet_name: str,
     start_date,
-    end_date
+    end_date, 
+    key_prefix: str = "std"
 ):
     if not {"delivery_ts", "value"}.issubset(raw_df.columns):
         st.error(
@@ -177,7 +178,7 @@ def render_standard_sheet(
         data=pivot.to_csv().encode("utf-8-sig"),
         file_name=f"{sheet_name}_pivot.csv",
         mime="text/csv",
-        key=f"dl_{sheet_name}",
+        key=f"dl_{key_prefix}_{sheet_name}",
     )
 
 
@@ -260,7 +261,7 @@ if uploaded_file is not None:
 
             for sheet in selected_sheets:
                 raw_df = pd.read_excel(xls, sheet_name=sheet)
-                render_standard_sheet(raw_df, sheet, start_date, end_date)
+                render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="tab1")
                 st.markdown("---")
                 st.markdown("---")
         else:
@@ -287,7 +288,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_nets:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_date)
+                        render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="net")
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν sheets τύπου 'Net ...' ή 'Total ...'.")
@@ -303,7 +304,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_imports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_date)
+                        render_standard_sheet(raw_df, sheet, start_date, end_datekey_prefix="imp")
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εισαγωγών.")
@@ -319,7 +320,7 @@ if uploaded_file is not None:
                     )
                     for sheet in selected_exports:
                         raw_df = pd.read_excel(xls, sheet_name=sheet)
-                        render_standard_sheet(raw_df, sheet, start_date, end_date)
+                        render_standard_sheet(raw_df, sheet, start_date, end_date,key_prefix="exp")
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
