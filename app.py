@@ -294,6 +294,8 @@ SUMMARY_METRICS = {
     "lv":      (lambda s: s == "load lv",         "SUM",  1),
     "losses":  (lambda s: s == "load losses",     "SUM",  1),
     "pump":    (lambda s: s == "load pump",       "SUM",  1),
+    "bess_buy":  (lambda s: s == "bess_buy",      "SUM",  1),
+    "bess_sell": (lambda s: s == "bess_sell",     "SUM",  1),
     "dr":      (lambda s: s == "load d-r",        "SUM",  1),
     "lignite": (lambda s: s == "lignite",         "SUM",  1),
     "gas":     (lambda s: s == "natural gas",     "SUM",  1),
@@ -303,7 +305,7 @@ SUMMARY_METRICS = {
     "exports": (lambda s: s == "exports",         "SUM", -1),
 }
 
-BAR_COLORS = ["#10233f", "#1b4a8a", "#4f8fd6", "#8fb1e2", "#c6d6f0"]
+BAR_COLORS = ["#10233f", "#1b4a8a", "#4f8fd6", "#8fb1e2", "#c6d6f0", "#2a9d8f", "#8fd3c8"]
 
 SUMMARY_CSS = """
 <style>
@@ -414,11 +416,11 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
     if have_split:
         rows += [("HV load", "hv", "MWh", 1), ("MV load", "mv", "MWh", 1),
                  ("LV load", "lv", "MWh", 1), ("System losses", "losses", "MWh", 1)]
-    rows += [("Pump", "pump", "MWh", 0), ("D/R load", "dr", "MWh", 0),("Bess_buy", "bess_buy", "MWh", 0)
-             ("Exports", "exports", "MWh", 0),("RES", "res", "MWh", 0),
-             ("Hydro", "hydro", "MWh", 0), ("Lignite", "lignite", "MWh", 0), 
-             ("Gas", "gas", "MWh", 0), ("Bess_sell", "bess_sell", "MWh", 0)
-            ]
+    rows += [("Pump", "pump", "MWh", 0), ("D/R load", "dr", "MWh", 0),
+             ("BESS buy", "bess_buy", "MWh", 0), ("Exports", "exports", "MWh", 0),
+             ("RES", "res", "MWh", 0), ("Hydro", "hydro", "MWh", 0),
+             ("Lignite", "lignite", "MWh", 0), ("Gas", "gas", "MWh", 0),
+             ("BESS sell", "bess_sell", "MWh", 0)]
 
     def _at(series, day):
         v = series.get(day.date())
@@ -490,6 +492,8 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
             ("RES + Hydro", res_hydro),
             ("Lignite", daily.get("lignite")),
             ("Gas", daily.get("gas")),
+            ("BESS buy", daily.get("bess_buy")),
+            ("BESS sell", daily.get("bess_sell")),
         ]
         chart_rows = [
             {"name": n, "delta": _delta(s), "color": c}
