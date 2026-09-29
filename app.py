@@ -277,6 +277,142 @@ def render_standard_sheet(
     )
 
 
+# ---------------------------------------------------------------------------
+# Summary tab: D vs D-1 vs W-1 (μέσος όρος προηγούμενων 7 ημερών)
+# ---------------------------------------------------------------------------
+# label, sheet-matcher, aggregation ("AVG" για τιμή, "SUM" για ποσότητες), unit, sign
+SUMMARY_ROWS = [
+    ("MCP",     lambda s: s == "mcp",                "AVG", "€/MWh", 1),
+    ("Load",    lambda s: s.startswith("demand"),    "SUM", "MWh",   1),
+    ("Lignite", lambda s: s == "lignite",            "SUM", "MWh",   1),
+    ("Gas",     lambda s: s == "natural gas",        "SUM", "MWh",   1),
+    ("RES",     lambda s: s == "res",                "SUM", "MWh",   1),
+    ("Imports", lambda s: s == "imports",            "SUM", "MWh",   1),
+    ("Exports", lambda s: s == "exports",            "SUM", "MWh",  -1),  # εμφανίζονται αρνητικά
+    ("Hydro",   lambda s: s == "hydro",              "SUM", "MWh",   1),
+]
+
+SUMMARY_CSS = """
+<style>
+.dam-card{border:1px solid rgba(128,128,128,.28);border-radius:10px;overflow-x:auto;
+  font-variant-numeric:tabular-nums;max-width:1100px}
+.dam-card table{border-collapse:collapse;width:100%;font-size:15px}
+.dam-card th{font-weight:600;font-size:13px;opacity:.7;padding:10px 12px;text-align:right;
+  border-bottom:1px solid rgba(128,128,128,.35);white-space:nowrap}
+.dam-card th.grp{text-align:center;opacity:1;font-size:14px;background:rgba(128,128,128,.14)}
+.dam-card th:first-child,.dam-card td:first-child{text-align:left}
+.dam-card td{padding:9px 12px;text-align:right;white-space:nowrap}
+.dam-card tr:nth-child(even) td{background:rgba(128,128,128,.08)}
+.dam-card td.lbl{font-weight:500}
+.dam-card td.cur{font-weight:700;font-size:16px}
+.dam-card td.ref{opacity:.75}
+.dam-card td.sep,.dam-card th.sep{border-left:1px solid rgba(128,128,128,.35)}
+.dam-card .u{font-size:11px;opacity:.6;margin-left:4px}
+.dam-card .up{color:#2e9d5b;font-weight:600}
+.dam-card .dn{color:#d64545;font-weight:600}
+.dam-card .fl{opacity:.6}
+</style>
+"""
+
+
+def _fmt_num(x, decimals=0, signed=False):
+    if x is None or pd.isna(x):
+        return "—"
+    s = f"{abs(x):,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    if x < 0:
+        return "-" + s
+    return ("+" + s) if signed and x > 0 else s
+
+
+def _delta_cells(cur, ref, decimals, unit):
+    """Δ και Δ% (κλάση χρώματος + βελάκι). Οι cur/ref είναι θετικές (magnitudes)."""
+    if cur is None or ref is None or pd.isna(cur) or pd.isna(ref):
+        return '<td class="fl">—</td><td class="fl">—</td>'
+    d = cur - ref
+    cls = "up" if d > 0 else ("dn" if d < 0 else "fl")
+    arrow = "↗" if d > 0 else ("↘" if d < 0 else "→")
+    pct = f"{_fmt_num(d / ref * 100, 0, signed=True)}%" if ref != 0 else "—"
+    return (
+        f'<td class="{cls}">{_fmt_num(d, decimals, signed=True)}<span class="u">{unit}</span></td>'
+        f'<td class="{cls}">{pct} {arrow}</td>'
+    )
+
+
+def _daily_value(raw_df, sheet_name, agg, start_date, end_date):
+    """Ημερήσια τιμή ανά ημέρα, με ΙΔΙΑ λογική με τους πίνακες (build_hourly_pivot)."""
+    pv = build_hourly_pivot(raw_df, sheet_name=sheet_name, start_date=start_date, end_date=end_date)
+    return pv[agg]  # index = date
+
+
+def render_summary_tab(xls, sheet_names, min_date, max_date):
+    st.markdown("### ⚡ Day-Ahead Market — Σύγκριση")
+
+    d_sel = st.date_input(
+        "Ημέρα D:",
+        value=max_date,
+        min_value=min_date,
+        max_value=max_date,
+        key="summary_day",
+    )
+    d = pd.Timestamp(d_sel).date()
+    d1 = (pd.Timestamp(d) - pd.Timedelta(days=1)).date()
+    w_start = (pd.Timestamp(d) - pd.Timedelta(days=7)).date()  # D-7 .. D-1
+    w_days = [x.date() for x in pd.date_range(w_start, d1)]
+
+    lower = {s.lower().strip(): s for s in sheet_names}
+    rows_html = []
+    missing = []
+
+    for label, matcher, agg, unit, sign in SUMMARY_ROWS:
+        real = next((orig for low, orig in lower.items() if matcher(low)), None)
+        if real is None:
+            missing.append(label)
+            continue
+
+        raw_df = pd.read_excel(xls, sheet_name=real)
+        daily = _daily_value(raw_df, real, agg, w_start, d)
+
+        cur, prev = daily.get(d), daily.get(d1)
+        wk = daily.reindex(w_days).mean()
+
+        dec = 2 if agg == "AVG" else 0
+        # Δ/Δ% πάνω στα μεγέθη (magnitudes), το πρόσημο (Exports) μόνο στην εμφάνιση
+        rows_html.append(
+            "<tr>"
+            f'<td class="lbl">{label}</td>'
+            f'<td class="cur">{_fmt_num(sign * cur, dec)}</td>'
+            f'<td class="ref">{_fmt_num(sign * prev, dec)}</td>'
+            f"{_delta_cells(cur, prev, dec, unit)}"
+            f'<td class="ref sep">{_fmt_num(sign * wk, dec)}</td>'
+            f"{_delta_cells(cur, wk, dec, unit)}"
+            "</tr>"
+        )
+
+    if not rows_html:
+        st.info("Δεν βρέθηκαν τα sheets που χρειάζονται για την περίληψη.")
+        return
+
+    html = (
+        SUMMARY_CSS
+        + '<div class="dam-card"><table>'
+        + '<tr><th></th><th class="grp" colspan="4">Ημέρα vs χθες</th>'
+        + '<th class="grp sep" colspan="3">Ημέρα vs μέσος όρος προηγ. εβδομάδας</th></tr>'
+        + f"<tr><th></th><th>D<br>{d:%d/%m}</th><th>D-1<br>{d1:%d/%m}</th><th>Δ</th><th>Δ%</th>"
+        + f'<th class="sep">W-1 avg<br>{w_start:%d/%m}–{d1:%d/%m}</th><th>Δ</th><th>Δ%</th></tr>'
+        + "".join(rows_html)
+        + "</table></div>"
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+    st.caption(
+        "MCP: ημερήσιος μέσος όρος (€/MWh). Υπόλοιπα: ημερήσιο σύνολο (MWh). "
+        "W-1 = μέσος όρος των ημερήσιων τιμών των 7 ημερών πριν την D. "
+        "Exports εμφανίζονται αρνητικά· Δ και Δ% υπολογίζονται πάνω στα μεγέθη τους."
+    )
+    if missing:
+        st.warning("Δεν βρέθηκαν sheets για: " + ", ".join(missing))
+
+
 if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
     sheet_names = xls.sheet_names
@@ -355,7 +491,7 @@ if uploaded_file is not None:
 
     standard_sheets = [s for s in sheet_names if s not in country_sheet_matches]
 
-    tab1, tab2 = st.tabs(["📁 Dam Results", "🌍 Imports / Exports"])
+    tab1, tab2, tab3 = st.tabs(["📁 Dam Results", "🌍 Imports / Exports", "⚡ Summary"])
 
     with tab1:
         if sheet_names:
@@ -440,5 +576,8 @@ if uploaded_file is not None:
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
+
+    with tab3:
+        render_summary_tab(xls, sheet_names, global_min_date, global_max_date)
 else:
     st.info("Ανέβασε ένα .xlsx αρχείο για να ξεκινήσεις.")
