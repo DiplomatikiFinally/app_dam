@@ -131,6 +131,18 @@ def date_range_picker(min_date, max_date, default_range,key):
     if isinstance(date_range, tuple) and len(date_range) == 2:
         return date_range
     return min_date, max_date
+# Τίτλοι εμφάνισης (μόνο για το UI - τα ονόματα των sheets στο Excel μένουν ίδια)
+DISPLAY_TITLES = {
+    "imports": "Imports (AL, BG, MK, IT, TR)",
+    "exports": "Exports (AL, BG, MK, IT, TR)",
+    "implicit": "Implicit (BG, IT)",
+}
+
+
+def display_title(sheet_name: str) -> str:
+    return DISPLAY_TITLES.get(sheet_name.strip().lower(), sheet_name)
+
+
 def render_implicit_chart(raw_df, sheet_name, start_date, end_date, key_prefix="std"):
     if not {"delivery_ts", "value"}.issubset(raw_df.columns):
         st.error(
@@ -148,7 +160,7 @@ def render_implicit_chart(raw_df, sheet_name, start_date, end_date, key_prefix="
     )
     pivot = pivot[(pivot.index >= start_date) & (pivot.index <= end_date)]
 
-    st.subheader(sheet_name)
+    st.subheader(display_title(sheet_name))
 
     if pivot.empty:
         st.info("Δεν υπάρχουν δεδομένα για το επιλεγμένο διάστημα.")
@@ -249,7 +261,7 @@ def render_standard_sheet(
         (pivot_full.index <= end_date)
     ]
 
-    st.subheader(sheet_name)
+    st.subheader(display_title(sheet_name))
 
     if pivot.empty:
         st.info("Δεν υπάρχουν δεδομένα για το επιλεγμένο διάστημα.")
@@ -627,6 +639,7 @@ if uploaded_file is not None:
                 "Επίλεξε κατηγορίες (μπορείς πάνω από μία):",
                 standard_sheets,
                 default=default_selection,
+                format_func=display_title,
                 key="select_standard",
             )
 
