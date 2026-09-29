@@ -409,18 +409,25 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
         daily["net_imports"] = daily["imports"].add(daily["exports"], fill_value=0)
 
     # ---- γραμμές πίνακα ---------------------------------------------------
-    rows = [("MCP", "mcp", "€/MWh", 0), ("Load + Losses", "load_total", "MWh", 0)]
+    rows = [("MCP", "mcp", "€/MWh", 0), ("Imports", "imports", "MWh", 0),
+            ("Load + Losses", "load_total", "MWh", 0)]
     if have_split:
         rows += [("HV load", "hv", "MWh", 1), ("MV load", "mv", "MWh", 1),
                  ("LV load", "lv", "MWh", 1), ("System losses", "losses", "MWh", 1)]
     rows += [("Pump", "pump", "MWh", 0), ("D/R load", "dr", "MWh", 0),
+             ("Exports", "exports", "MWh", 0), ("Hydro", "hydro", "MWh", 0),
              ("Lignite", "lignite", "MWh", 0), ("Gas", "gas", "MWh", 0),
-             ("RES", "res", "MWh", 0), ("Imports", "imports", "MWh", 0),
-             ("Exports", "exports", "MWh", 0), ("Hydro", "hydro", "MWh", 0)]
+             ("RES", "res", "MWh", 0)]
 
     def _at(series, day):
         v = series.get(day.date())
         return None if v is None else float(v)
+
+    def _dcalc(key, cur, ref):
+        """Exports: Δ/Δ% πάνω στα μεγέθη (|D| - |ref|), ώστε -1.049 vs -2.318 -> -1.269 (-55%)."""
+        if key == "exports" and cur is not None and ref is not None and not pd.isna(ref):
+            return abs(cur), abs(ref)
+        return cur, ref
 
     body, missing = [], []
     for label, key, unit, level in rows:
@@ -436,9 +443,9 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
             f'<td class="lbl">{label}</td>'
             f'<td class="cur">{_fmt_num(cur, dec)}</td>'
             f'<td class="ref">{_fmt_num(prev, dec)}</td>'
-            f"{_delta_cells(cur, prev, dec, unit)}"
+            f"{_delta_cells(*_dcalc(key, cur, prev), dec, unit)}"
             f'<td class="ref sep">{_fmt_num(wk, dec)}</td>'
-            f"{_delta_cells(cur, wk, dec, unit)}"
+            f"{_delta_cells(*_dcalc(key, cur, wk), dec, unit)}"
             "</tr>"
         )
 
@@ -514,7 +521,8 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
         f"D-1 = {_dstr(d1)} (καθημερινή → προηγούμενη καθημερινή, Σαβ/Κυρ → ίδια μέρα προηγ. εβδομάδας). "
         f"W-1 = μέσος όρος {wk_kind} ({_dstr(wdays[0])} – {_dstr(wdays[-1])}). "
         "MCP: ημερήσιος μέσος όρος (€/MWh)· υπόλοιπα: ημερήσιο σύνολο (MWh). "
-        "Exports με το πραγματικό τους πρόσημο (αρνητικό), Net imports = Imports + Exports."
+        "Exports εμφανίζονται αρνητικά, αλλά Δ/Δ% υπολογίζονται πάνω στο μέγεθός τους (μείωση εξαγωγών = αρνητικό Δ). "
+        "Στο διάγραμμα, Net imports = Imports + Exports."
     )
     if missing:
         st.warning(
