@@ -1,3 +1,4 @@
+import io
 import re
 
 import streamlit as st
@@ -402,7 +403,7 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
         real = next((orig for low, orig in lower.items() if matcher(low)), None)
         if real is None:
             continue
-        raw_df = pd.read_excel(xls, sheet_name=real)
+        raw_df = xls[real].copy()
         daily[key] = _daily_series(raw_df, real, agg, sign, start.date(), d.date())
 
     have_split = all(k in daily for k in ("hv", "mv", "lv", "losses"))
@@ -535,19 +536,23 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
         )
 
 
+@st.cache_data(show_spinner="Φόρτωση Excel...")
+def load_workbook(file_bytes: bytes) -> dict:
+    """Διαβάζει ΟΛΑ τα sheets μία φορά και τα κρατάει στη μνήμη (cache).
+    Χωρίς αυτό, κάθε αλλαγή σε widget (π.χ. κλείσιμο μιας κατηγορίας) ξαναδιάβαζε
+    το Excel από την αρχή, γιατί το Streamlit τρέχει ολόκληρο το script σε κάθε κλικ."""
+    return pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
+
+
 if uploaded_file is not None:
-    xls = pd.ExcelFile(uploaded_file)
-    sheet_names = xls.sheet_names
+    xls = load_workbook(uploaded_file.getvalue())  # dict {sheet_name: DataFrame}
+    sheet_names = list(xls.keys())
 
     all_dates = []
 
     for sheet in sheet_names:
         try:
-            temp_df = pd.read_excel(
-                xls,
-                sheet_name=sheet,
-                usecols=["delivery_ts"]
-            )
+            temp_df = xls[sheet][["delivery_ts"]]
 
             temp_dates = (
                 pd.to_datetime(
@@ -629,7 +634,7 @@ if uploaded_file is not None:
                 st.info("Επίλεξε τουλάχιστον μία κατηγορία για να εμφανιστούν δεδομένα.")
 
             for sheet in selected_sheets:
-                raw_df = pd.read_excel(xls, sheet_name=sheet)
+                raw_df = xls[sheet].copy()
                 render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="tab1")
                 st.markdown("---")
                 st.markdown("---")
@@ -660,7 +665,7 @@ if uploaded_file is not None:
                         key="select_nets",
                     )
                     for sheet in selected_nets:
-                        raw_df = pd.read_excel(xls, sheet_name=sheet)
+                        raw_df = xls[sheet].copy()
                         render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="net")
                         st.markdown("---")
                 else:
@@ -676,7 +681,7 @@ if uploaded_file is not None:
                         key="select_imports",
                     )
                     for sheet in selected_imports:
-                        raw_df = pd.read_excel(xls, sheet_name=sheet)
+                        raw_df = xls[sheet].copy()
                         # ΔΙΟΡΘΩΣΗ ΕΔΩ: Χρήση key_prefix αντί για end_datekey_prefix
                         render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="imp")
                         st.markdown("---")
@@ -693,7 +698,7 @@ if uploaded_file is not None:
                         key="select_exports",
                     )
                     for sheet in selected_exports:
-                        raw_df = pd.read_excel(xls, sheet_name=sheet)
+                        raw_df = xls[sheet].copy()
                         render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="exp")
                         st.markdown("---")
                 else:
