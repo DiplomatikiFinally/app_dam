@@ -278,33 +278,49 @@ def render_standard_sheet(
 
 
 # ---------------------------------------------------------------------------
-# Summary tab: D vs D-1 vs W-1 (μέσος όρος προηγούμενων 7 ημερών)
+# Summary tab: D vs D-1 και D vs W-1
+#   D-1 : Τρι–Παρ -> προηγούμενη μέρα · Δευτέρα -> προηγούμενη Παρασκευή ·
+#         Σάββατο/Κυριακή -> το ίδιο (Σαβ/Κυρ) της προηγούμενης εβδομάδας
+#   W-1 : καθημερινή -> μέσος όρος Δευ–Παρ της προηγούμενης εβδομάδας ·
+#         Σαβ/Κυρ -> μέσος όρος Σαβ+Κυρ του προηγούμενου σαββατοκύριακου
 # ---------------------------------------------------------------------------
-# label, sheet-matcher, aggregation ("AVG" για τιμή, "SUM" για ποσότητες), unit, sign
-SUMMARY_ROWS = [
-    ("MCP",     lambda s: s == "mcp",                "AVG", "€/MWh", 1),
-    ("Load",    lambda s: s.startswith("demand"),    "SUM", "MWh",   1),
-    ("Lignite", lambda s: s == "lignite",            "SUM", "MWh",   1),
-    ("Gas",     lambda s: s == "natural gas",        "SUM", "MWh",   1),
-    ("RES",     lambda s: s == "res",                "SUM", "MWh",   1),
-    ("Imports", lambda s: s == "imports",            "SUM", "MWh",   1),
-    ("Exports", lambda s: s == "exports",            "SUM", "MWh",  -1),  # εμφανίζονται αρνητικά
-    ("Hydro",   lambda s: s == "hydro",              "SUM", "MWh",   1),
-]
+DAY_NAMES = ["Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ"]
+
+# key: (sheet matcher, aggregation, sign)   sign=-1 -> εμφανίζεται αρνητικό (Exports)
+SUMMARY_METRICS = {
+    "mcp":     (lambda s: s == "mcp",             "AVG",  1),
+    "hv":      (lambda s: s == "load hv",         "SUM",  1),
+    "mv":      (lambda s: s == "load mv",         "SUM",  1),
+    "lv":      (lambda s: s == "load lv",         "SUM",  1),
+    "losses":  (lambda s: s == "load losses",     "SUM",  1),
+    "pump":    (lambda s: s == "load pump",       "SUM",  1),
+    "dr":      (lambda s: s == "load d-r",        "SUM",  1),
+    "lignite": (lambda s: s == "lignite",         "SUM",  1),
+    "gas":     (lambda s: s == "natural gas",     "SUM",  1),
+    "res":     (lambda s: s == "res",             "SUM",  1),
+    "hydro":   (lambda s: s == "hydro",           "SUM",  1),
+    "imports": (lambda s: s == "imports",         "SUM",  1),
+    "exports": (lambda s: s == "exports",         "SUM", -1),
+}
+
+BAR_COLORS = ["#10233f", "#1b4a8a", "#4f8fd6", "#8fb1e2", "#c6d6f0"]
 
 SUMMARY_CSS = """
 <style>
 .dam-card{border:1px solid rgba(128,128,128,.28);border-radius:10px;overflow-x:auto;
-  font-variant-numeric:tabular-nums;max-width:1100px}
+  font-variant-numeric:tabular-nums}
 .dam-card table{border-collapse:collapse;width:100%;font-size:15px}
-.dam-card th{font-weight:600;font-size:13px;opacity:.7;padding:10px 12px;text-align:right;
-  border-bottom:1px solid rgba(128,128,128,.35);white-space:nowrap}
+.dam-card th{font-weight:600;font-size:13px;opacity:.75;padding:9px 10px;text-align:right;
+  border-bottom:1px solid rgba(128,128,128,.35);white-space:nowrap;line-height:1.3}
 .dam-card th.grp{text-align:center;opacity:1;font-size:14px;background:rgba(128,128,128,.14)}
 .dam-card th:first-child,.dam-card td:first-child{text-align:left}
-.dam-card td{padding:9px 12px;text-align:right;white-space:nowrap}
+.dam-card td{padding:8px 10px;text-align:right;white-space:nowrap}
 .dam-card tr:nth-child(even) td{background:rgba(128,128,128,.08)}
 .dam-card td.lbl{font-weight:500}
+.dam-card tr.sub td{font-size:13.5px;opacity:.85}
+.dam-card tr.sub td.lbl{padding-left:26px;font-weight:400}
 .dam-card td.cur{font-weight:700;font-size:16px}
+.dam-card tr.sub td.cur{font-size:14px;font-weight:600}
 .dam-card td.ref{opacity:.75}
 .dam-card td.sep,.dam-card th.sep{border-left:1px solid rgba(128,128,128,.35)}
 .dam-card .u{font-size:11px;opacity:.6;margin-left:4px}
@@ -315,104 +331,196 @@ SUMMARY_CSS = """
 """
 
 
-def _fmt_num(x, decimals=0, signed=False):
+def _fmt_num(x, decimals=0):
+    """Ελληνική μορφή: 164.605 / 57,41 — το πρόσημο μόνο όταν είναι αρνητικό."""
     if x is None or pd.isna(x):
         return "—"
     s = f"{abs(x):,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    if x < 0:
-        return "-" + s
-    return ("+" + s) if signed and x > 0 else s
+    return "-" + s if round(x, decimals) < 0 else s
+
+
+def _prev_same_type_day(d):
+    wd = d.weekday()
+    if wd == 0:            # Δευτέρα -> προηγούμενη Παρασκευή
+        return d - pd.Timedelta(days=3)
+    if wd <= 4:            # Τρι..Παρ -> χθες
+        return d - pd.Timedelta(days=1)
+    return d - pd.Timedelta(days=7)   # Σαβ/Κυρ -> ίδια μέρα προηγούμενης εβδομάδας
+
+
+def _w1_days(d):
+    monday = d - pd.Timedelta(days=d.weekday())
+    if d.weekday() >= 5:   # προηγούμενο σαββατοκύριακο
+        return [monday - pd.Timedelta(days=2), monday - pd.Timedelta(days=1)]
+    return [monday - pd.Timedelta(days=7 - i) for i in range(5)]   # προηγούμενη Δευ..Παρ
 
 
 def _delta_cells(cur, ref, decimals, unit):
-    """Δ και Δ% (κλάση χρώματος + βελάκι). Οι cur/ref είναι θετικές (magnitudes)."""
     if cur is None or ref is None or pd.isna(cur) or pd.isna(ref):
         return '<td class="fl">—</td><td class="fl">—</td>'
     d = cur - ref
     cls = "up" if d > 0 else ("dn" if d < 0 else "fl")
     arrow = "↗" if d > 0 else ("↘" if d < 0 else "→")
-    pct = f"{_fmt_num(d / ref * 100, 0, signed=True)}%" if ref != 0 else "—"
+    pct = f"{_fmt_num(d / abs(ref) * 100, 0)}%" if ref != 0 else "—"
     return (
-        f'<td class="{cls}">{_fmt_num(d, decimals, signed=True)}<span class="u">{unit}</span></td>'
+        f'<td class="{cls}">{_fmt_num(d, decimals)}<span class="u">{unit}</span></td>'
         f'<td class="{cls}">{pct} {arrow}</td>'
     )
 
 
-def _daily_value(raw_df, sheet_name, agg, start_date, end_date):
-    """Ημερήσια τιμή ανά ημέρα, με ΙΔΙΑ λογική με τους πίνακες (build_hourly_pivot)."""
-    pv = build_hourly_pivot(raw_df, sheet_name=sheet_name, start_date=start_date, end_date=end_date)
-    return pv[agg]  # index = date
+def _daily_series(raw_df, sheet_name, agg, sign, start_date, end_date):
+    """Ημερήσια τιμή ανά ημέρα με την ΙΔΙΑ λογική με τους πίνακες (build_hourly_pivot)."""
+    try:
+        pv = build_hourly_pivot(raw_df, sheet_name=sheet_name, start_date=start_date, end_date=end_date)
+        return pv[agg] * sign
+    except Exception:
+        return pd.Series(dtype=float)
+
+
+def _dstr(x):
+    return f"{DAY_NAMES[x.weekday()]} {x:%d/%m}"
 
 
 def render_summary_tab(xls, sheet_names, min_date, max_date):
     st.markdown("### ⚡ Day-Ahead Market — Σύγκριση")
 
     d_sel = st.date_input(
-        "Ημέρα D:",
-        value=max_date,
-        min_value=min_date,
-        max_value=max_date,
-        key="summary_day",
+        "Ημέρα D:", value=max_date, min_value=min_date, max_value=max_date, key="summary_day"
     )
-    d = pd.Timestamp(d_sel).date()
-    d1 = (pd.Timestamp(d) - pd.Timedelta(days=1)).date()
-    w_start = (pd.Timestamp(d) - pd.Timedelta(days=7)).date()  # D-7 .. D-1
-    w_days = [x.date() for x in pd.date_range(w_start, d1)]
+    d = pd.Timestamp(d_sel)
+    d1 = _prev_same_type_day(d)
+    wdays = _w1_days(d)
+    start = min([d1] + wdays)
 
+    # ---- ημερήσιες τιμές ανά metric --------------------------------------
     lower = {s.lower().strip(): s for s in sheet_names}
-    rows_html = []
-    missing = []
-
-    for label, matcher, agg, unit, sign in SUMMARY_ROWS:
+    daily = {}
+    for key, (matcher, agg, sign) in SUMMARY_METRICS.items():
         real = next((orig for low, orig in lower.items() if matcher(low)), None)
         if real is None:
+            continue
+        raw_df = pd.read_excel(xls, sheet_name=real)
+        daily[key] = _daily_series(raw_df, real, agg, sign, start.date(), d.date())
+
+    have_split = all(k in daily for k in ("hv", "mv", "lv", "losses"))
+    if have_split:
+        daily["load_total"] = sum(daily[k] for k in ("hv", "mv", "lv", "losses"))
+    if "imports" in daily and "exports" in daily:
+        daily["net_imports"] = daily["imports"].add(daily["exports"], fill_value=0)
+
+    # ---- γραμμές πίνακα ---------------------------------------------------
+    rows = [("MCP", "mcp", "€/MWh", 0), ("Load + Losses", "load_total", "MWh", 0)]
+    if have_split:
+        rows += [("HV load", "hv", "MWh", 1), ("MV load", "mv", "MWh", 1),
+                 ("LV load", "lv", "MWh", 1), ("System losses", "losses", "MWh", 1)]
+    rows += [("Pump", "pump", "MWh", 0), ("D/R load", "dr", "MWh", 0),
+             ("Lignite", "lignite", "MWh", 0), ("Gas", "gas", "MWh", 0),
+             ("RES", "res", "MWh", 0), ("Imports", "imports", "MWh", 0),
+             ("Exports", "exports", "MWh", 0), ("Hydro", "hydro", "MWh", 0)]
+
+    def _at(series, day):
+        v = series.get(day.date())
+        return None if v is None else float(v)
+
+    body, missing = [], []
+    for label, key, unit, level in rows:
+        s = daily.get(key)
+        if s is None:
             missing.append(label)
             continue
-
-        raw_df = pd.read_excel(xls, sheet_name=real)
-        daily = _daily_value(raw_df, real, agg, w_start, d)
-
-        cur, prev = daily.get(d), daily.get(d1)
-        wk = daily.reindex(w_days).mean()
-
-        dec = 2 if agg == "AVG" else 0
-        # Δ/Δ% πάνω στα μεγέθη (magnitudes), το πρόσημο (Exports) μόνο στην εμφάνιση
-        rows_html.append(
-            "<tr>"
+        dec = 2 if key == "mcp" else 0
+        cur, prev = _at(s, d), _at(s, d1)
+        wk = s.reindex([x.date() for x in wdays]).mean()
+        body.append(
+            f'<tr class="{"sub" if level else ""}">'
             f'<td class="lbl">{label}</td>'
-            f'<td class="cur">{_fmt_num(sign * cur, dec)}</td>'
-            f'<td class="ref">{_fmt_num(sign * prev, dec)}</td>'
+            f'<td class="cur">{_fmt_num(cur, dec)}</td>'
+            f'<td class="ref">{_fmt_num(prev, dec)}</td>'
             f"{_delta_cells(cur, prev, dec, unit)}"
-            f'<td class="ref sep">{_fmt_num(sign * wk, dec)}</td>'
+            f'<td class="ref sep">{_fmt_num(wk, dec)}</td>'
             f"{_delta_cells(cur, wk, dec, unit)}"
             "</tr>"
         )
 
-    if not rows_html:
+    if not body:
         st.info("Δεν βρέθηκαν τα sheets που χρειάζονται για την περίληψη.")
         return
 
+    wk_kind = "Σαβ+Κυρ" if d.weekday() >= 5 else "Δευ–Παρ"
     html = (
         SUMMARY_CSS
         + '<div class="dam-card"><table>'
-        + '<tr><th></th><th class="grp" colspan="4">Ημέρα vs χθες</th>'
-        + '<th class="grp sep" colspan="3">Ημέρα vs μέσος όρος προηγ. εβδομάδας</th></tr>'
-        + f"<tr><th></th><th>D<br>{d:%d/%m}</th><th>D-1<br>{d1:%d/%m}</th><th>Δ</th><th>Δ%</th>"
-        + f'<th class="sep">W-1 avg<br>{w_start:%d/%m}–{d1:%d/%m}</th><th>Δ</th><th>Δ%</th></tr>'
-        + "".join(rows_html)
+        + '<tr><th></th><th class="grp" colspan="4">D vs D-1</th>'
+        + '<th class="grp sep" colspan="3">D vs W-1</th></tr>'
+        + f"<tr><th></th><th>D<br>{_dstr(d)}</th><th>D-1<br>{_dstr(d1)}</th><th>Δ</th><th>Δ%</th>"
+        + f'<th class="sep">W-1 avg<br>{wk_kind} {wdays[0]:%d/%m}–{wdays[-1]:%d/%m}</th><th>Δ</th><th>Δ%</th></tr>'
+        + "".join(body)
         + "</table></div>"
     )
-    st.markdown(html, unsafe_allow_html=True)
 
-    # st.markdown(
-    #     "<small style='color: grey;'>MCP: ημερήσιος μέσος όρος (€/MWh).<br>"
-    #     "Υπόλοιπα: ημερήσιο σύνολο (MWh).<br>"
-    #     "W-1 = μέσος όρος των ημερήσιων τιμών των 7 ημερών πριν την D.<br>"
-    #     "Exports εμφανίζονται αρνητικά· Δ και Δ% υπολογίζονται πάνω στα μεγέθη τους.</small>",
-    #     unsafe_allow_html=True
-    # )
+    left, right = st.columns([5, 3])
+    with left:
+        st.markdown(html, unsafe_allow_html=True)
+
+    # ---- διάγραμμα Δ ------------------------------------------------------
+    with right:
+        mode = st.radio("Διάγραμμα Δ (MWh)", ["vs D-1", "vs W-1"], horizontal=True, key="summary_chart_mode")
+
+        def _delta(series):
+            if series is None:
+                return None
+            cur = _at(series, d)
+            ref = _at(series, d1) if mode == "vs D-1" else series.reindex([x.date() for x in wdays]).mean()
+            return None if cur is None or pd.isna(ref) else cur - ref
+
+        res_hydro = (
+            daily["res"].add(daily["hydro"], fill_value=0) if "res" in daily and "hydro" in daily else None
+        )
+        items = [
+            ("Load + Losses", daily.get("load_total")),
+            ("Net imports", daily.get("net_imports")),
+            ("RES + Hydro", res_hydro),
+            ("Lignite", daily.get("lignite")),
+            ("Gas", daily.get("gas")),
+        ]
+        chart_rows = [
+            {"name": n, "delta": _delta(s), "color": c}
+            for (n, s), c in zip(items, BAR_COLORS)
+            if _delta(s) is not None
+        ]
+        if chart_rows:
+            cdf = pd.DataFrame(chart_rows)
+            cdf["label"] = cdf["delta"].apply(_fmt_num)
+            names, colors = cdf["name"].tolist(), cdf["color"].tolist()
+
+            base = alt.Chart(cdf).encode(x=alt.X("name:N", sort=names, axis=None))
+            bars = base.mark_bar().encode(
+                y=alt.Y("delta:Q", title="Δ (MWh)", axis=alt.Axis(format=",.0f")),
+                color=alt.Color(
+                    "name:N", sort=names, scale=alt.Scale(domain=names, range=colors),
+                    legend=alt.Legend(title=None, orient="bottom", columns=2),
+                ),
+                tooltip=["name", "label"],
+            )
+            txt_pos = base.mark_text(dy=-8, fontSize=13, fontWeight="bold").encode(
+                y="delta:Q", text="label:N").transform_filter("datum.delta >= 0")
+            txt_neg = base.mark_text(dy=14, fontSize=13, fontWeight="bold").encode(
+                y="delta:Q", text="label:N").transform_filter("datum.delta < 0")
+            zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="gray").encode(y="y:Q")
+            st.altair_chart((bars + txt_pos + txt_neg + zero).properties(height=340),
+                            use_container_width=True)
+
+    st.caption(
+        f"D-1 = {_dstr(d1)} (καθημερινή → προηγούμενη καθημερινή, Σαβ/Κυρ → ίδια μέρα προηγ. εβδομάδας). "
+        f"W-1 = μέσος όρος {wk_kind} ({_dstr(wdays[0])} – {_dstr(wdays[-1])}). "
+        "MCP: ημερήσιος μέσος όρος (€/MWh)· υπόλοιπα: ημερήσιο σύνολο (MWh). "
+        "Exports με το πραγματικό τους πρόσημο (αρνητικό), Net imports = Imports + Exports."
+    )
     if missing:
-        st.warning("Δεν βρέθηκαν sheets για: " + ", ".join(missing))
+        st.warning(
+            "Δεν βρέθηκαν sheets για: " + ", ".join(missing)
+            + ". Τρέξε ξανά το main_for_excel.py και ανέβασε το νέο Excel."
+        )
 
 
 if uploaded_file is not None:
