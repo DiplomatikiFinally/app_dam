@@ -305,7 +305,7 @@ SUMMARY_METRICS = {
     "exports": (lambda s: s == "exports",         "SUM", -1),
 }
 
-BAR_COLORS = ["#10233f", "#1b4a8a", "#4f8fd6", "#8fb1e2", "#c6d6f0", "#2a9d8f", "#8fd3c8"]
+BAR_COLORS = ["#10233f", "#1b4a8a", "#4f8fd6", "#8fb1e2", "#c6d6f0"]
 
 SUMMARY_CSS = """
 <style>
@@ -319,6 +319,7 @@ SUMMARY_CSS = """
 .dam-card td{padding:8px 10px;text-align:right;white-space:nowrap}
 .dam-card tr:nth-child(even) td{background:rgba(128,128,128,.08)}
 .dam-card td.lbl{font-weight:500}
+.dam-card tr.sep-top td{border-top:2px solid rgba(128,128,128,.55)}
 .dam-card tr.sub td{font-size:13.5px;opacity:.85}
 .dam-card tr.sub td.lbl{padding-left:26px;font-weight:400}
 .dam-card td.cur{font-weight:700;font-size:16px}
@@ -442,7 +443,7 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
         cur, prev = _at(s, d), _at(s, d1)
         wk = s.reindex([x.date() for x in wdays]).mean()
         body.append(
-            f'<tr class="{"sub" if level else ""}">'
+            f'<tr class="{"sub" if level else ""} {"sep-top" if key in ("imports", "exports") else ""}">'
             f'<td class="lbl">{label}</td>'
             f'<td class="cur">{_fmt_num(cur, dec)}</td>'
             f'<td class="ref">{_fmt_num(prev, dec)}</td>'
@@ -492,8 +493,6 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
             ("RES + Hydro", res_hydro),
             ("Lignite", daily.get("lignite")),
             ("Gas", daily.get("gas")),
-            ("BESS buy", daily.get("bess_buy")),
-            ("BESS sell", daily.get("bess_sell")),
         ]
         chart_rows = [
             {"name": n, "delta": _delta(s), "color": c}
