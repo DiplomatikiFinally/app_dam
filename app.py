@@ -414,10 +414,11 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
     if have_split:
         rows += [("HV load", "hv", "MWh", 1), ("MV load", "mv", "MWh", 1),
                  ("LV load", "lv", "MWh", 1), ("System losses", "losses", "MWh", 1)]
-    rows += [("Pump", "pump", "MWh", 0), ("D/R load", "dr", "MWh", 0),
-             ("Exports", "exports", "MWh", 0), ("Hydro", "hydro", "MWh", 0),
-             ("Lignite", "lignite", "MWh", 0), ("Gas", "gas", "MWh", 0),
-             ("RES", "res", "MWh", 0)]
+    rows += [("Pump", "pump", "MWh", 0), ("D/R load", "dr", "MWh", 0),("Bess_buy", "bess_buy", "MWh", 0)
+             ("Exports", "exports", "MWh", 0),("RES", "res", "MWh", 0),
+             ("Hydro", "hydro", "MWh", 0), ("Lignite", "lignite", "MWh", 0), 
+             ("Gas", "gas", "MWh", 0), ("Bess_sell", "bess_sell", "MWh", 0)
+            ]
 
     def _at(series, day):
         v = series.get(day.date())
