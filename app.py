@@ -404,13 +404,13 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
     )
     st.markdown(html, unsafe_allow_html=True)
 
-    st.markdown(
-        "<small style='color: grey;'>MCP: ημερήσιος μέσος όρος (€/MWh).<br>"
-        "Υπόλοιπα: ημερήσιο σύνολο (MWh).<br>"
-        "W-1 = μέσος όρος των ημερήσιων τιμών των 7 ημερών πριν την D.<br>"
-        "Exports εμφανίζονται αρνητικά· Δ και Δ% υπολογίζονται πάνω στα μεγέθη τους.</small>",
-        unsafe_allow_html=True
-    )
+    # st.markdown(
+    #     "<small style='color: grey;'>MCP: ημερήσιος μέσος όρος (€/MWh).<br>"
+    #     "Υπόλοιπα: ημερήσιο σύνολο (MWh).<br>"
+    #     "W-1 = μέσος όρος των ημερήσιων τιμών των 7 ημερών πριν την D.<br>"
+    #     "Exports εμφανίζονται αρνητικά· Δ και Δ% υπολογίζονται πάνω στα μεγέθη τους.</small>",
+    #     unsafe_allow_html=True
+    # )
     if missing:
         st.warning("Δεν βρέθηκαν sheets για: " + ", ".join(missing))
 
