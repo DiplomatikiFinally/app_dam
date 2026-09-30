@@ -317,12 +317,15 @@ SUMMARY_METRICS = {
     "lignite": (lambda s: s == "lignite",         "SUM",  1),
     "gas":     (lambda s: s == "natural gas",     "SUM",  1),
     "res":     (lambda s: s == "res",             "SUM",  1),
+    "mandatory_hydro": (lambda s: s == "mandatory hydro", "SUM", 1),
+    "over_mandatory_hydro": (lambda s: s == "over mandatory hydro", "SUM", 1),
     "hydro":   (lambda s: s == "hydro",           "SUM",  1),
     "imports": (lambda s: s == "imports",         "SUM",  1),
     "exports": (lambda s: s == "exports",         "SUM", -1),
+    "imports_net": (lambda s: s == "imports net", "SUM", 1),
 }
 
-BAR_COLORS = ["#10233f", "#1b4a8a", "#3b74c0", "#4f8fd6", "#8fb1e2", "#c6d6f0"]
+BAR_COLORS = ["#455a64", "#e67e22", "#2e9d5b", "#0d47a1", "#111111", "#7a7a7a"]
 
 SUMMARY_CSS = """
 <style>
@@ -794,12 +797,18 @@ if uploaded_file is not None:
                                 ])
         flow_totals = [
             next(s for s in sheet_names if s.strip().lower() == name)
-            for name in ("imports", "exports", "implicit")
+            for name in ("imports net", "implicit")
             if any(s.strip().lower() == name for s in sheet_names)
         ]
         net_sheets = flow_totals + [s for s in net_only if s not in flow_totals]
         import_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Import"])
+        imports_total_sheet = next((s for s in sheet_names if s.strip().lower() == "imports"), None)
+        if imports_total_sheet:
+            import_sheets = [imports_total_sheet] + import_sheets
         export_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Export"])
+        exports_total_sheet = next((s for s in sheet_names if s.strip().lower() == "exports"), None)
+        if exports_total_sheet:
+            export_sheets = [exports_total_sheet] + export_sheets
 
         if not net_sheets and not import_sheets and not export_sheets:
             st.info("Δεν βρέθηκαν σχετικά sheets για Imports / Exports / Nets στο αρχείο.")
