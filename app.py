@@ -137,6 +137,7 @@ DISPLAY_TITLES = {
     "imports": "Imports (AL, BG, MK, IT, TR)",
     "exports": "Exports (AL, BG, MK, IT, TR)",
     "implicit": "Implicit (BG, IT)",
+    "imports net": "Imports Net (Imports − Exports)",
 }
 
 
@@ -317,15 +318,37 @@ SUMMARY_METRICS = {
     "lignite": (lambda s: s == "lignite",         "SUM",  1),
     "gas":     (lambda s: s == "natural gas",     "SUM",  1),
     "res":     (lambda s: s == "res",             "SUM",  1),
-    "mandatory_hydro": (lambda s: s == "mandatory hydro", "SUM", 1),
-    "over_mandatory_hydro": (lambda s: s == "over mandatory hydro", "SUM", 1),
     "hydro":   (lambda s: s == "hydro",           "SUM",  1),
     "imports": (lambda s: s == "imports",         "SUM",  1),
     "exports": (lambda s: s == "exports",         "SUM", -1),
-    "imports_net": (lambda s: s == "imports net", "SUM", 1),
 }
 
-BAR_COLORS = ["#455a64", "#e67e22", "#2e9d5b", "#0d47a1", "#111111", "#7a7a7a"]
+# Χρώμα ανά κατηγορία: key -> (χρώμα, χρώμα κειμένου πάνω στο χρώμα)
+CATEGORY_COLORS = {
+    "mcp":        ("#3f51b5", "#ffffff"),  # ιντιγκό
+    "imports":    ("#ff7a00", "#ffffff"),  # πορτοκαλί
+    "exports":    ("#8e44ad", "#ffffff"),  # μωβ
+    "load_total": ("#0e9aa7", "#ffffff"),  # τιρκουάζ (Load + HV/MV/LV/Losses)
+    "hv":         ("#0e9aa7", "#ffffff"),
+    "mv":         ("#0e9aa7", "#ffffff"),
+    "lv":         ("#0e9aa7", "#ffffff"),
+    "losses":     ("#0e9aa7", "#ffffff"),
+    "pump":       ("#8d6e63", "#ffffff"),  # καφέ
+    "dr":         ("#e91e8c", "#ffffff"),  # ροζ/φούξια
+    "bess_buy":   ("#f2c300", "#1a1a1a"),  # κίτρινο
+    "bess_sell":  ("#f2c300", "#1a1a1a"),
+    "res":        ("#2e9d5b", "#ffffff"),  # πράσινο
+    "hydro":      ("#1f6feb", "#ffffff"),  # μπλε
+    "lignite":    ("#111111", "#ffffff"),  # μαύρο
+    "gas":        ("#8c8c8c", "#ffffff"),  # γκρι
+}
+CATEGORY_COLORS["net_imports"] = CATEGORY_COLORS["imports"]
+
+
+def _hex_to_rgba(hex_color, alpha):
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
 
 SUMMARY_CSS = """
 <style>
@@ -350,6 +373,11 @@ SUMMARY_CSS = """
 .dam-card .up{color:#2e9d5b;font-weight:600}
 .dam-card .dn{color:#d64545;font-weight:600}
 .dam-card .fl{opacity:.6}
+.dam-card tr.cat td{background:var(--bg) !important}
+.dam-card tr.cat td:first-child{border-left:6px solid var(--c)}
+.dam-card .chip{display:inline-block;padding:2px 11px;border-radius:12px;font-weight:600;
+  font-size:13.5px;line-height:1.5;box-shadow:0 0 0 1px rgba(128,128,128,.4)}
+.dam-card tr.sub .chip{font-size:12.5px;font-weight:500}
 </style>
 """
 
@@ -462,9 +490,11 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
         dec = 2 if key == "mcp" else 0
         cur, prev = _at(s, d), _at(s, d1)
         wk = s.reindex([x.date() for x in wdays]).mean()
+        color, txt = CATEGORY_COLORS.get(key, ("#888888", "#ffffff"))
         body.append(
-            f'<tr class="{"sub" if level else ""} {"sep-top" if key in ("imports", "exports") else ""}">'
-            f'<td class="lbl">{label}</td>'
+            f'<tr class="cat {"sub" if level else ""} {"sep-top" if key in ("imports", "exports") else ""}" '
+            f'style="--c:{color};--bg:{_hex_to_rgba(color, 0.13)}">'
+            f'<td class="lbl"><span class="chip" style="background:{color};color:{txt}">{label}</span></td>'
             f'<td class="cur">{_fmt_num(cur, dec)}</td>'
             f'<td class="ref">{_fmt_num(prev, dec)}</td>'
             f"{_delta_cells(*_dcalc(key, cur, prev), dec, unit)}"
@@ -505,17 +535,17 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
             return None if cur is None or pd.isna(ref) else cur - ref
 
         items = [
-            ("Load + Losses", daily.get("load_total")),
-            ("Net imports", daily.get("net_imports")),
-            ("RES", daily.get("res")),
-            ("Hydro", daily.get("hydro")),
-            ("Lignite", daily.get("lignite")),
-            ("Gas", daily.get("gas")),
+            ("Load + Losses", "load_total"),
+            ("Net imports", "net_imports"),
+            ("RES", "res"),
+            ("Hydro", "hydro"),
+            ("Lignite", "lignite"),
+            ("Gas", "gas"),
         ]
         chart_rows = [
-            {"name": n, "delta": _delta(s), "color": c}
-            for (n, s), c in zip(items, BAR_COLORS)
-            if _delta(s) is not None
+            {"name": n, "delta": _delta(daily.get(k)), "color": CATEGORY_COLORS[k][0]}
+            for n, k in items
+            if _delta(daily.get(k)) is not None
         ]
         if chart_rows:
             cdf = pd.DataFrame(chart_rows)
@@ -523,7 +553,7 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
             names, colors = cdf["name"].tolist(), cdf["color"].tolist()
 
             base = alt.Chart(cdf).encode(x=alt.X("name:N", sort=names, axis=None))
-            bars = base.mark_bar().encode(
+            bars = base.mark_bar(stroke="rgba(128,128,128,.6)", strokeWidth=1).encode(
                 y=alt.Y("delta:Q", title="Δ (MWh)", axis=alt.Axis(format=",.0f")),
                 color=alt.Color(
                     "name:N", sort=names, scale=alt.Scale(domain=names, range=colors),
@@ -554,29 +584,36 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
 
 
 # Sheets που ΔΕΝ εμφανίζονται στο tab 1 (lower-case ονόματα)
-HIDDEN_IN_TAB1 = {"load hv", "load mv", "load lv", "load losses", "imports", "exports", "implicit"}
+HIDDEN_IN_TAB1 = {"load hv", "load mv", "load lv", "load losses", "imports", "exports", "implicit", "imports net"}
+# Τα Residual (Actual / Forecast) δεν εμφανίζονται στο tab Dam Results· είναι στο tab Forecast.
+HIDDEN_PREFIXES_TAB1 = ("actual residual", "total residual", "residual forecast")
+
+
+def _hidden_in_tab1(sheet_name: str) -> bool:
+    low = sheet_name.strip().lower()
+    return low in HIDDEN_IN_TAB1 or low.startswith(HIDDEN_PREFIXES_TAB1)
 
 CMP_SLOTS = 4
 CMP_COLORS = ["#1b4a8a", "#d64545", "#2e9d5b", "#e0a020"]
 
 
 def render_compare_tab(xls, sheet_names, start_date, end_date, min_date, max_date):
-    """Tab 4: πίνακες MCP / Total Residual / Forecast Residual + διάγραμμα σύγκρισης.
+    """Tab Forecast: πίνακες MCP / Actual Residual / Forecast Residual + διάγραμμα σύγκρισης.
     Κάθε καμπύλη του διαγράμματος = (μέγεθος, ημέρα), άρα μπορείς π.χ. να βάλεις
     MCP σήμερα vs MCP χθες, MCP σήμερα vs Forecast Residual προχθές, κ.λπ."""
     lower = {s.lower().strip(): s for s in sheet_names}
     sources = {}  # όνομα -> (sheet, group)
     if "mcp" in lower:
         sources["MCP"] = (lower["mcp"], "mcp")
-    tr = next((o for l, o in lower.items() if l.startswith("total residual")), None)
+    tr = next((o for l, o in lower.items() if l.startswith(("actual residual", "total residual"))), None)
     fr = next((o for l, o in lower.items() if l.startswith("residual forecast")), None)
     if tr:
-        sources["Total Residual"] = (tr, "res")
+        sources["Actual Residual"] = (tr, "res")
     if fr:
         sources["Forecast Residual"] = (fr, "res")
 
     if not sources:
-        st.info("Δεν βρέθηκαν τα sheets MCP / Total Residual / Residual Forecast στο αρχείο.")
+        st.info("Δεν βρέθηκαν τα sheets MCP / Actual Residual / Residual Forecast στο αρχείο.")
         return
 
     # ---- πίνακες (ίδιοι με το tab 1) -------------------------------------
@@ -760,15 +797,16 @@ if uploaded_file is not None:
 
     standard_sheets = [s for s in sheet_names if s not in country_sheet_matches]
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["📁 Dam Results", "🌍 Imports / Exports", "⚡ Summary", "📈 MCP & Residual"]
+    # Σειρά tabs: Summary, Forecast, Imports / Exports, Dam Results
+    tab_summary, tab_forecast, tab2, tab1 = st.tabs(
+        ["⚡ Summary", "🔮 Forecast", "🌍 Imports / Exports", "📁 Dam Results"]
     )
 
     with tab1:
         if sheet_names:
-            # Στο tab 1 δεν εμφανίζονται μόνα τους τα HV/MV/LV/Losses ούτε τα Imports/Exports/Implicit
-            # (τα τελευταία είναι στο tab "Imports / Exports" -> Net & Totals).
-            standard_sheets = [s for s in standard_sheets if s.strip().lower() not in HIDDEN_IN_TAB1]
+            # Δεν εμφανίζονται: HV/MV/LV/Losses, Imports/Exports/Imports Net/Implicit (tab "Imports / Exports")
+            # ούτε τα Actual / Forecast Residual (tab "Forecast").
+            standard_sheets = [s for s in standard_sheets if not _hidden_in_tab1(s)]
             default_selection = standard_sheets
             selected_sheets = st.multiselect(
                 "Επίλεξε κατηγορίες (μπορείς πάνω από μία):",
@@ -795,20 +833,21 @@ if uploaded_file is not None:
                                     if ("net" in s.lower() or "total" in s.lower())
                                     and "residual" not in s.lower()
                                 ])
-        flow_totals = [
-            next(s for s in sheet_names if s.strip().lower() == name)
-            for name in ("imports net", "implicit")
-            if any(s.strip().lower() == name for s in sheet_names)
-        ]
+        def _find_sheet(name):
+            return next((s for s in sheet_names if s.strip().lower() == name), None)
+
+        # Net & Totals: πρώτα Imports Net (= Imports - Exports) και Implicit, μετά τα Net ανά χώρα
+        flow_totals = [s for s in (_find_sheet("imports net"), _find_sheet("implicit")) if s]
         net_sheets = flow_totals + [s for s in net_only if s not in flow_totals]
-        import_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Import"])
-        imports_total_sheet = next((s for s in sheet_names if s.strip().lower() == "imports"), None)
-        if imports_total_sheet:
-            import_sheets = [imports_total_sheet] + import_sheets
-        export_sheets = sorted([s for s, (d, _c) in country_sheet_matches.items() if d == "Export"])
-        exports_total_sheet = next((s for s in sheet_names if s.strip().lower() == "exports"), None)
-        if exports_total_sheet:
-            export_sheets = [exports_total_sheet] + export_sheets
+
+        # Τα συνολικά Imports / Exports μπαίνουν πάνω πάνω στις αναλυτικές ενότητες
+        imports_total, exports_total = _find_sheet("imports"), _find_sheet("exports")
+        import_sheets = ([imports_total] if imports_total else []) + sorted(
+            [s for s, (d, _c) in country_sheet_matches.items() if d == "Import"]
+        )
+        export_sheets = ([exports_total] if exports_total else []) + sorted(
+            [s for s, (d, _c) in country_sheet_matches.items() if d == "Export"]
+        )
 
         if not net_sheets and not import_sheets and not export_sheets:
             st.info("Δεν βρέθηκαν σχετικά sheets για Imports / Exports / Nets στο αρχείο.")
@@ -816,11 +855,12 @@ if uploaded_file is not None:
             sub_tab1, sub_tab2, sub_tab3 = st.tabs(["📊 Net & Totals", "📥 Αναλυτικές Εισαγωγές", "📤 Αναλυτικές Εξαγωγές"])
 
             with sub_tab1:
-                st.markdown("#### 🔄 Καθαρές Ροές (Net) & Total Imports / Exports")
+                st.markdown("#### 🔄 Καθαρές Ροές (Net): Imports Net & Implicit")
                 if net_sheets:
                     selected_nets = st.multiselect(
-                        "Επίλεξε Net / Total sheets:",
+                        "Επίλεξε Net sheets:",
                         net_sheets,
+                        format_func=display_title,
                         default=net_sheets,
                         key="select_nets",
                     )
@@ -832,28 +872,29 @@ if uploaded_file is not None:
                     st.info("Δεν βρέθηκαν sheets τύπου 'Net ...' ή 'Total ...'.")
 
             with sub_tab2:
-                st.markdown("#### 📥 Αναλυτικές Εισαγωγές ανά χώρα (Import XX-GR)")
+                st.markdown("#### 📥 Αναλυτικές Εισαγωγές: Σύνολο & ανά χώρα (Import XX-GR)")
                 if import_sheets:
                     selected_imports = st.multiselect(
                         "Επίλεξε χώρες εισαγωγών:",
                         import_sheets,
+                        format_func=display_title,
                         default=import_sheets,
                         key="select_imports",
                     )
                     for sheet in selected_imports:
                         raw_df = xls[sheet].copy()
-                        # ΔΙΟΡΘΩΣΗ ΕΔΩ: Χρήση key_prefix αντί για end_datekey_prefix
                         render_standard_sheet(raw_df, sheet, start_date, end_date, key_prefix="imp")
                         st.markdown("---")
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εισαγωγών.")
 
             with sub_tab3:
-                st.markdown("#### 📤 Αναλυτικές Εξαγωγές ανά χώρα (Export GR-XX)")
+                st.markdown("#### 📤 Αναλυτικές Εξαγωγές: Σύνολο & ανά χώρα (Export GR-XX)")
                 if export_sheets:
                     selected_exports = st.multiselect(
                         "Επίλεξε χώρες εξαγωγών:",
                         export_sheets,
+                        format_func=display_title,
                         default=export_sheets,
                         key="select_exports",
                     )
@@ -864,10 +905,10 @@ if uploaded_file is not None:
                 else:
                     st.info("Δεν βρέθηκαν αναλυτικά sheets εξαγωγών.")
 
-    with tab3:
+    with tab_summary:
         render_summary_tab(xls, sheet_names, global_min_date, global_max_date)
 
-    with tab4:
+    with tab_forecast:
         render_compare_tab(xls, sheet_names, start_date, end_date, global_min_date, global_max_date)
 else:
     st.info("Ανέβασε ένα .xlsx αρχείο για να ξεκινήσεις.")
