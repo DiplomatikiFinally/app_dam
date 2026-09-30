@@ -75,7 +75,7 @@ def build_hourly_pivot(
     pivot = pivot.sort_index(ascending=False)
     return pivot
 
-def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
+def style_pivot_table(pivot: pd.DataFrame, hour_cols: list, decimals: int = 0):
     """Per-row (per-day) background coloring for the hourly columns: for a
     given day, the lowest hour is green and the highest hour is red,
     independent of what happens on other days. SUM and AVG keep their own
@@ -118,7 +118,7 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
     for total_col in ("SUM", "AVG"):
         if total_col in pivot.columns:
             styled = styled.apply(colorize_col, subset=[total_col], axis=0)
-    return styled.format(precision=0, na_rep="")
+    return styled.format(precision=decimals, na_rep="")
 
 
 def date_range_picker(min_date, max_date, default_range,key):
@@ -274,9 +274,11 @@ def render_standard_sheet(
 
     hour_cols = list(range(1, 25))
 
+    # MCP: 2 δεκαδικά · όλα τα υπόλοιπα: 0
     styled = style_pivot_table(
         pivot,
-        hour_cols
+        hour_cols,
+        decimals=2 if "mcp" in sheet_name.lower() else 0,
     )
 
     table_height = min(35 * (len(pivot) + 1) + 3, 900)
@@ -344,12 +346,6 @@ CATEGORY_COLORS = {
 }
 CATEGORY_COLORS["net_imports"] = CATEGORY_COLORS["imports"]
 
-
-def _hex_to_rgba(hex_color, alpha):
-    h = hex_color.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    return f"rgba({r},{g},{b},{alpha})"
-
 SUMMARY_CSS = """
 <style>
 .dam-card{border:1px solid rgba(128,128,128,.28);border-radius:10px;overflow-x:auto;
@@ -373,11 +369,6 @@ SUMMARY_CSS = """
 .dam-card .up{color:#2e9d5b;font-weight:600}
 .dam-card .dn{color:#d64545;font-weight:600}
 .dam-card .fl{opacity:.6}
-.dam-card tr.cat td{background:var(--bg) !important}
-.dam-card tr.cat td:first-child{border-left:6px solid var(--c)}
-.dam-card .chip{display:inline-block;padding:2px 11px;border-radius:12px;font-weight:600;
-  font-size:13.5px;line-height:1.5;box-shadow:0 0 0 1px rgba(128,128,128,.4)}
-.dam-card tr.sub .chip{font-size:12.5px;font-weight:500}
 </style>
 """
 
@@ -490,11 +481,9 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
         dec = 2 if key == "mcp" else 0
         cur, prev = _at(s, d), _at(s, d1)
         wk = s.reindex([x.date() for x in wdays]).mean()
-        color, txt = CATEGORY_COLORS.get(key, ("#888888", "#ffffff"))
         body.append(
-            f'<tr class="cat {"sub" if level else ""} {"sep-top" if key in ("imports", "exports") else ""}" '
-            f'style="--c:{color};--bg:{_hex_to_rgba(color, 0.13)}">'
-            f'<td class="lbl"><span class="chip" style="background:{color};color:{txt}">{label}</span></td>'
+            f'<tr class="{"sub" if level else ""} {"sep-top" if key in ("imports", "exports") else ""}">'
+            f'<td class="lbl">{label}</td>'
             f'<td class="cur">{_fmt_num(cur, dec)}</td>'
             f'<td class="ref">{_fmt_num(prev, dec)}</td>'
             f"{_delta_cells(*_dcalc(key, cur, prev), dec, unit)}"
@@ -807,6 +796,11 @@ if uploaded_file is not None:
             # Δεν εμφανίζονται: HV/MV/LV/Losses, Imports/Exports/Imports Net/Implicit (tab "Imports / Exports")
             # ούτε τα Actual / Forecast Residual (tab "Forecast").
             standard_sheets = [s for s in standard_sheets if not _hidden_in_tab1(s)]
+            # Το Crete Net εμφανίζεται πάντα τελευταίο (κάτω κάτω)
+            standard_sheets = (
+                [s for s in standard_sheets if s.strip().lower() != "crete net"]
+                + [s for s in standard_sheets if s.strip().lower() == "crete net"]
+            )
             default_selection = standard_sheets
             selected_sheets = st.multiselect(
                 "Επίλεξε κατηγορίες (μπορείς πάνω από μία):",
@@ -832,6 +826,7 @@ if uploaded_file is not None:
                                     s for s in sheet_names
                                     if ("net" in s.lower() or "total" in s.lower())
                                     and "residual" not in s.lower()
+                                    and s.strip().lower() != "crete net"
                                 ])
         def _find_sheet(name):
             return next((s for s in sheet_names if s.strip().lower() == name), None)
