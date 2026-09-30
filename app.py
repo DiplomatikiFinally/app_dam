@@ -573,7 +573,7 @@ def render_summary_tab(xls, sheet_names, min_date, max_date):
 
 
 # Sheets που ΔΕΝ εμφανίζονται στο tab 1 (lower-case ονόματα)
-HIDDEN_IN_TAB1 = {"load hv", "load mv", "load lv", "load losses", "imports", "exports", "implicit", "imports net"}
+HIDDEN_IN_TAB1 = {"load hv", "load mv", "load lv", "load losses", "imports", "exports", "implicit", "imports net","crete net"}
 # Τα Residual (Actual / Forecast) δεν εμφανίζονται στο tab Dam Results· είναι στο tab Forecast.
 HIDDEN_PREFIXES_TAB1 = ("actual residual", "total residual", "residual forecast")
 
@@ -788,7 +788,7 @@ if uploaded_file is not None:
 
     # Σειρά tabs: Summary, Forecast, Imports / Exports, Dam Results
     tab_summary, tab_forecast, tab2, tab1 = st.tabs(
-        ["⚡ Summary", "🔮 Forecast", "🌍 Imports / Exports", "📁 Dam Results"]
+        ["⚡ Summary", "🔮 Residual Analysis", "🌍 Imports / Exports", "📁 Dam Results"]
     )
 
     with tab1:
@@ -796,11 +796,11 @@ if uploaded_file is not None:
             # Δεν εμφανίζονται: HV/MV/LV/Losses, Imports/Exports/Imports Net/Implicit (tab "Imports / Exports")
             # ούτε τα Actual / Forecast Residual (tab "Forecast").
             standard_sheets = [s for s in standard_sheets if not _hidden_in_tab1(s)]
-            # Το Crete Net εμφανίζεται πάντα τελευταίο (κάτω κάτω)
-            standard_sheets = (
-                [s for s in standard_sheets if s.strip().lower() != "crete net"]
-                + [s for s in standard_sheets if s.strip().lower() == "crete net"]
-            )
+            # # Το Crete Net εμφανίζεται πάντα τελευταίο (κάτω κάτω)
+            # standard_sheets = (
+            #     [s for s in standard_sheets if s.strip().lower() != "crete net"]
+            #     + [s for s in standard_sheets if s.strip().lower() == "crete net"]
+            # )
             default_selection = standard_sheets
             selected_sheets = st.multiselect(
                 "Επίλεξε κατηγορίες (μπορείς πάνω από μία):",
@@ -836,12 +836,23 @@ if uploaded_file is not None:
         net_sheets = flow_totals + [s for s in net_only if s not in flow_totals]
 
         # Τα συνολικά Imports / Exports μπαίνουν πάνω πάνω στις αναλυτικές ενότητες
-        imports_total, exports_total = _find_sheet("imports"), _find_sheet("exports")
-        import_sheets = ([imports_total] if imports_total else []) + sorted(
-            [s for s, (d, _c) in country_sheet_matches.items() if d == "Import"]
+        imports_total = _find_sheet("imports")
+        exports_total = _find_sheet("exports")
+        crete_net = _find_sheet("crete net")
+
+        import_sheets = (
+            ([imports_total] if imports_total else [])
+            + sorted(
+                [s for s, (d, _c) in country_sheet_matches.items() if d == "Import"]
+            )
         )
-        export_sheets = ([exports_total] if exports_total else []) + sorted(
-            [s for s, (d, _c) in country_sheet_matches.items() if d == "Export"]
+
+        export_sheets = (
+            ([exports_total] if exports_total else [])
+            + sorted(
+                [s for s, (d, _c) in country_sheet_matches.items() if d == "Export"]
+            )
+            + ([crete_net] if crete_net else [])
         )
 
         if not net_sheets and not import_sheets and not export_sheets:
