@@ -23,6 +23,9 @@ COUNTRY_SHEET_RE = re.compile(r"^(export|import)\s+(?:gr-(\w+)|(\w+)-gr)$", re.I
 TIMESTAMP_SHIFT_HOURS = 2
 
 
+SPACER_COL = " "  # κενή στήλη ανάμεσα στην τελευταία ώρα και το SUM/AVG
+
+
 def build_hourly_pivot(
     df: pd.DataFrame,
     value_col: str = "value",
@@ -67,7 +70,7 @@ def build_hourly_pivot(
     if "mcp" in (sheet_name or "").lower():
         pivot["SUM"] = np.nan
 
-    pivot.insert(pivot.columns.get_loc("SUM"), "", np.nan)
+    pivot.insert(pivot.columns.get_loc("SUM"), SPACER_COL, "")
 
     pivot = pivot.sort_index(ascending=False)
     return pivot
@@ -111,14 +114,11 @@ def style_pivot_table(pivot: pd.DataFrame, hour_cols: list):
     def colorize_col(col: pd.Series):
         return _styles_for(col.to_numpy())
 
-    styled = (
-        pivot.style
-        .apply(colorize_row, subset=hour_cols, axis=1)
-        .apply(colorize_col, subset=["SUM"], axis=0)
-        .apply(colorize_col, subset=["AVG"], axis=0)
-        .format(precision=0, na_rep="")
-    )
-    return styled
+    styled = pivot.style.apply(colorize_row, subset=hour_cols, axis=1)
+    for total_col in ("SUM", "AVG"):
+        if total_col in pivot.columns:
+            styled = styled.apply(colorize_col, subset=[total_col], axis=0)
+    return styled.format(precision=0, na_rep="")
 
 
 def date_range_picker(min_date, max_date, default_range,key):
@@ -268,6 +268,9 @@ def render_standard_sheet(
         st.info("Δεν υπάρχουν δεδομένα για το επιλεγμένο διάστημα.")
         return
 
+    # MCP: μόνο AVG · όλα τα υπόλοιπα: μόνο SUM
+    pivot = pivot.drop(columns=["SUM" if "mcp" in sheet_name.lower() else "AVG"])
+
     hour_cols = list(range(1, 25))
 
     styled = style_pivot_table(
@@ -284,7 +287,7 @@ def render_standard_sheet(
     )
     st.download_button(
         label=f"⬇️ Κατέβασε τον πίνακα ({sheet_name}) ως CSV",
-        data=pivot.to_csv().encode("utf-8-sig"),
+        data=pivot.drop(columns=[SPACER_COL]).to_csv().encode("utf-8-sig"),
         file_name=f"{sheet_name}_pivot.csv",
         mime="text/csv",
         key=f"dl_{key_prefix}_{sheet_name}",
